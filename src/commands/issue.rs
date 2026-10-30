@@ -29,12 +29,8 @@ pub async fn execute_issue(
     json_mode: bool,
 ) -> anyhow::Result<()> {
     match args.command {
-        IssueCommands::List(list_args) => {
-            handle_list(list_args, client, project, json_mode).await
-        }
-        IssueCommands::View(view_args) => {
-            handle_view(view_args, client, project, json_mode).await
-        }
+        IssueCommands::List(list_args) => handle_list(list_args, client, project, json_mode).await,
+        IssueCommands::View(view_args) => handle_view(view_args, client, project, json_mode).await,
         IssueCommands::Create(create_args) => handle_create(create_args, client, project).await,
         IssueCommands::Close(close_args) => handle_close(close_args, client, project).await,
         IssueCommands::Reopen(reopen_args) => handle_reopen(reopen_args, client, project).await,
@@ -126,7 +122,10 @@ async fn handle_view(
         ),
     ]);
     if !issue.labels.is_empty() {
-        table.add_row(vec![Cell::new("Labels"), Cell::new(issue.labels.join(", "))]);
+        table.add_row(vec![
+            Cell::new("Labels"),
+            Cell::new(issue.labels.join(", ")),
+        ]);
     }
     if let Some(web) = &issue.web_url {
         table.add_row(vec![Cell::new("Web URL"), Cell::new(web)]);

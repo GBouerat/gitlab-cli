@@ -73,8 +73,11 @@ pub fn parse_gitlab_error_body(raw_body: &str) -> String {
                     .iter()
                     .map(|(k, v)| {
                         if let Some(arr) = v.as_array() {
-                            let items: Vec<String> =
-                                arr.iter().filter_map(|i| i.as_str()).map(String::from).collect();
+                            let items: Vec<String> = arr
+                                .iter()
+                                .filter_map(|i| i.as_str())
+                                .map(String::from)
+                                .collect();
                             format!("{k}: {}", items.join(", "))
                         } else {
                             format!("{k}: {v}")

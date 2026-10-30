@@ -1,0 +1,140 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-binaries:
+    name: Build (${{ matrix.target }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+            use_cross: true
+            archive_ext: tar.gz
+          - target: aarch64-unknown-linux-musl
+            os: ubuntu-latest
+            use_cross: true
+            archive_ext: tar.gz
+          - target: x86_64-apple-darwin
+            os: macos-latest
+            use_cross: false
+            archive_ext: tar.gz
+          - target: aarch64-apple-darwin
+            os: macos-latest
+            use_cross: false
+            archive_ext: tar.gz
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            use_cross: false
+            archive_ext: zip
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      - name: Install cross
+        if: matrix.use_cross
+        run: cargo install cross --git https://github.com/cross-rs/cross
+
+      - name: Build Binary (cross)
+        if: matrix.use_cross
+        run: cross build --release --target ${{ matrix.target }}
+
+      - name: Build Binary (cargo)
+        if: "!matrix.use_cross"
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Package Release Assets (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          TAG_NAME="${GITHUB_REF#refs/tags/}"
+          ARCHIVE_NAME="gitlab-${TAG_NAME}-${{ matrix.target }}"
+          STAGING_DIR="staging/${ARCHIVE_NAME}"
+          mkdir -p "${STAGING_DIR}/completions"
+
+          cp "target/${{ matrix.target }}/release/gitlab" "${STAGING_DIR}/"
+          cp README.md LICENSE-MIT LICENSE-APACHE "${STAGING_DIR}/"
+
+          # Generate shell completions if host binary is available or using built binary
+          if [ "${{ matrix.target }}" = "aarch64-apple-darwin" ] || [ "${{ matrix.target }}" = "x86_64-apple-darwin" ]; then
+            "${STAGING_DIR}/gitlab" completion bash > "${STAGING_DIR}/completions/gitlab.bash" || true
+            "${STAGING_DIR}/gitlab" completion zsh > "${STAGING_DIR}/completions/_gitlab" || true
+          fi
+
+          tar -czf "${ARCHIVE_NAME}.tar.gz" -C staging "${ARCHIVE_NAME}"
+          shasum -a 256 "${ARCHIVE_NAME}.tar.gz" > "${ARCHIVE_NAME}.tar.gz.sha256"
+
+      - name: Package Release Assets (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          TAG_NAME="${GITHUB_REF#refs/tags/}"
+          ARCHIVE_NAME="gitlab-${TAG_NAME}-${{ matrix.target }}"
+          STAGING_DIR="staging/${ARCHIVE_NAME}"
+          mkdir -p "${STAGING_DIR}/completions"
+
+          cp "target/${{ matrix.target }}/release/gitlab.exe" "${STAGING_DIR}/"
+          cp README.md LICENSE-MIT LICENSE-APACHE "${STAGING_DIR}/"
+
+          "${STAGING_DIR}/gitlab.exe" completion bash > "${STAGING_DIR}/completions/gitlab.bash" || true
+          "${STAGING_DIR}/gitlab.exe" completion zsh > "${STAGING_DIR}/completions/_gitlab" || true
+
+          7z a "${ARCHIVE_NAME}.zip" "./staging/${ARCHIVE_NAME}/*"
+          certutil -hashfile "${ARCHIVE_NAME}.zip" SHA256 | grep -v "hash" | tr -d ' \r\n' > hash.txt
+          echo "$(cat hash.txt)  ${ARCHIVE_NAME}.zip" > "${ARCHIVE_NAME}.zip.sha256"
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: artifacts-${{ matrix.target }}
+          path: |
+            gitlab-*.*
+          if-no-files-found: error
+
+  publish-release:
+    name: Publish GitHub Release
+    needs: build-binaries
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: all-artifacts
+          merge-multiple: true
+
+      - name: Generate Unified SHA256SUMS.txt
+        run: |
+          cat all-artifacts/*.sha256 > SHA256SUMS.txt
+          mv SHA256SUMS.txt all-artifacts/
+          cat all-artifacts/SHA256SUMS.txt
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            all-artifacts/gitlab-*.tar.gz
+            all-artifacts/gitlab-*.zip
+            all-artifacts/SHA256SUMS.txt
+          generate_release_notes: true
+          draft: false
+          prerelease: false

@@ -20,11 +20,7 @@ pub fn create_table(headers: &[&str]) -> Table {
 
     let header_cells: Vec<Cell> = headers
         .iter()
-        .map(|h| {
-            Cell::new(*h)
-                .add_attribute(Attribute::Bold)
-                .fg(Color::Cyan)
-        })
+        .map(|h| Cell::new(*h).add_attribute(Attribute::Bold).fg(Color::Cyan))
         .collect();
 
     table.set_header(header_cells);

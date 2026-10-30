@@ -37,15 +37,11 @@ async fn handle_view(
     default_project: Option<&str>,
     json_mode: bool,
 ) -> anyhow::Result<()> {
-    let target = args
-        .project
-        .as_deref()
-        .or(default_project)
-        .ok_or_else(|| {
-            anyhow::anyhow!(
-                "No project specified. Provide a project path or run inside a GitLab repository."
-            )
-        })?;
+    let target = args.project.as_deref().or(default_project).ok_or_else(|| {
+        anyhow::anyhow!(
+            "No project specified. Provide a project path or run inside a GitLab repository."
+        )
+    })?;
 
     let project = client.get_project(target).await?;
 
@@ -66,9 +62,17 @@ async fn handle_view(
     let mut table = create_table(&["Property", "Value"]);
     table.add_row(vec![
         Cell::new("Name"),
-        Cell::new(project.name_with_namespace.as_deref().unwrap_or(&project.name)),
+        Cell::new(
+            project
+                .name_with_namespace
+                .as_deref()
+                .unwrap_or(&project.name),
+        ),
     ]);
-    table.add_row(vec![Cell::new("Path"), Cell::new(&project.path_with_namespace)]);
+    table.add_row(vec![
+        Cell::new("Path"),
+        Cell::new(&project.path_with_namespace),
+    ]);
     table.add_row(vec![
         Cell::new("ID"),
         colored_cell(project.id.to_string(), Color::Cyan, false),
@@ -113,7 +117,9 @@ async fn handle_list(
     client: &GitLabClient,
     json_mode: bool,
 ) -> anyhow::Result<()> {
-    let projects = client.list_projects(args.membership, Some(args.limit)).await?;
+    let projects = client
+        .list_projects(args.membership, Some(args.limit))
+        .await?;
 
     let mut table = create_table(&["ID", "Path", "Visibility", "Stars", "Default Branch"]);
     for p in &projects {

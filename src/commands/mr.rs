@@ -35,7 +35,9 @@ pub async fn execute_mr(
         MrCommands::List(list_args) => handle_list(list_args, client, project, json_mode).await,
         MrCommands::View(view_args) => handle_view(view_args, client, project, json_mode).await,
         MrCommands::Create(create_args) => handle_create(create_args, client, project).await,
-        MrCommands::Checkout(checkout_args) => handle_checkout(checkout_args, client, project).await,
+        MrCommands::Checkout(checkout_args) => {
+            handle_checkout(checkout_args, client, project).await
+        }
         MrCommands::Merge(merge_args) => handle_merge(merge_args, client, project).await,
         MrCommands::Close(close_args) => handle_close(close_args, client, project).await,
         MrCommands::Reopen(reopen_args) => handle_reopen(reopen_args, client, project).await,
@@ -177,15 +179,15 @@ async fn handle_create(
     };
 
     let mr = client
-        .create_mr(
-            project,
-            &source_branch,
-            &target_branch,
-            &title,
-            args.description.as_deref(),
-            args.draft,
-            args.squash,
-        )
+        .create_mr(&crate::api::CreateMrParams {
+            project_path: project,
+            source_branch: &source_branch,
+            target_branch: &target_branch,
+            title: &title,
+            description: args.description.as_deref(),
+            draft: args.draft,
+            squash: args.squash,
+        })
         .await?;
 
     println!(

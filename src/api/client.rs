@@ -32,6 +32,25 @@ pub struct GitLabClient {
     http: Client,
 }
 
+/// Parameters for creating a new Merge Request via [`GitLabClient::create_mr`].
+#[derive(Debug, Clone, Default)]
+pub struct CreateMrParams<'a> {
+    /// Target project ID or namespaced path.
+    pub project_path: &'a str,
+    /// Source feature branch containing the changes.
+    pub source_branch: &'a str,
+    /// Target destination branch.
+    pub target_branch: &'a str,
+    /// Title of the merge request.
+    pub title: &'a str,
+    /// Optional description text (Markdown).
+    pub description: Option<&'a str>,
+    /// Whether to mark the MR as Draft.
+    pub draft: bool,
+    /// Whether to configure commits to squash on merge.
+    pub squash: bool,
+}
+
 impl GitLabClient {
     /// Creates a new `GitLabClient` targeting the specified GitLab host.
     ///
@@ -95,9 +114,9 @@ impl GitLabClient {
 
         loop {
             // Clone the request if possible for retrying
-            let req = req_builder
-                .try_clone()
-                .ok_or_else(|| ApiError::Other("Request body stream cannot be cloned".to_string()))?;
+            let req = req_builder.try_clone().ok_or_else(|| {
+                ApiError::Other("Request body stream cannot be cloned".to_string())
+            })?;
 
             let resp = req.send().await.map_err(ApiError::Http)?;
             let status = resp.status();
@@ -128,7 +147,11 @@ impl GitLabClient {
     }
 
     /// Handles error status codes by converting them to typed [`ApiError`].
-    async fn check_response(&self, resp: Response, resource_hint: &str) -> Result<Response, ApiError> {
+    async fn check_response(
+        &self,
+        resp: Response,
+        resource_hint: &str,
+    ) -> Result<Response, ApiError> {
         let status = resp.status();
         if status.is_success() {
             return Ok(resp);
@@ -291,7 +314,9 @@ impl GitLabClient {
         let mut stream = resp.bytes_stream();
         while let Some(chunk_res) = stream.next().await {
             let chunk = chunk_res.map_err(ApiError::Http)?;
-            writer.write_all(&chunk).map_err(|e| ApiError::Other(e.to_string()))?;
+            writer
+                .write_all(&chunk)
+                .map_err(|e| ApiError::Other(e.to_string()))?;
             writer.flush().map_err(|e| ApiError::Other(e.to_string()))?;
         }
 
@@ -341,7 +366,10 @@ impl GitLabClient {
         let membership_str = if membership { "true" } else { "false" };
         self.get_paged(
             "projects",
-            &[("membership", membership_str), ("order_by", "last_activity_at")],
+            &[
+                ("membership", membership_str),
+                ("order_by", "last_activity_at"),
+            ],
             max_items,
         )
         .await
@@ -376,23 +404,14 @@ impl GitLabClient {
     }
 
     /// Creates a new Merge Request (`POST /projects/:id/merge_requests`).
-    pub async fn create_mr(
-        &self,
-        project_path: &str,
-        source_branch: &str,
-        target_branch: &str,
-        title: &str,
-        description: Option<&str>,
-        draft: bool,
-        squash: bool,
-    ) -> Result<MergeRequest, ApiError> {
-        let encoded = Self::encode_path(project_path);
+    pub async fn create_mr(&self, params: &CreateMrParams<'_>) -> Result<MergeRequest, ApiError> {
+        let encoded = Self::encode_path(params.project_path);
         let endpoint = format!("projects/{encoded}/merge_requests");
 
-        let effective_title = if draft && !title.starts_with("Draft:") {
-            format!("Draft: {title}")
+        let effective_title = if params.draft && !params.title.starts_with("Draft:") {
+            format!("Draft: {}", params.title)
         } else {
-            title.to_string()
+            params.title.to_string()
         };
 
         #[derive(Serialize)]
@@ -406,11 +425,11 @@ impl GitLabClient {
         }
 
         let body = CreateMrBody {
-            source_branch,
-            target_branch,
+            source_branch: params.source_branch,
+            target_branch: params.target_branch,
             title: effective_title,
-            description,
-            squash,
+            description: params.description,
+            squash: params.squash,
         };
 
         self.post(&endpoint, &body).await
@@ -451,7 +470,13 @@ impl GitLabClient {
             state_event: &'a str,
         }
 
-        self.put(&endpoint, &UpdateMrState { state_event: "close" }).await
+        self.put(
+            &endpoint,
+            &UpdateMrState {
+                state_event: "close",
+            },
+        )
+        .await
     }
 
     /// Reopens a closed Merge Request (`PUT /projects/:id/merge_requests/:mr_iid`).
@@ -464,7 +489,13 @@ impl GitLabClient {
             state_event: &'a str,
         }
 
-        self.put(&endpoint, &UpdateMrState { state_event: "reopen" }).await
+        self.put(
+            &endpoint,
+            &UpdateMrState {
+                state_event: "reopen",
+            },
+        )
+        .await
     }
 
     /// Lists issues for a project (`GET /projects/:id/issues`).
@@ -489,7 +520,11 @@ impl GitLabClient {
     }
 
     /// Gets a single issue by project-scoped IID (`GET /projects/:id/issues/:issue_iid`).
-    pub async fn get_issue(&self, project_path: &str, iid: u64) -> Result<crate::models::Issue, ApiError> {
+    pub async fn get_issue(
+        &self,
+        project_path: &str,
+        iid: u64,
+    ) -> Result<crate::models::Issue, ApiError> {
         let encoded = Self::encode_path(project_path);
         let endpoint = format!("projects/{encoded}/issues/{iid}");
         self.get(&endpoint, &[]).await
@@ -525,7 +560,11 @@ impl GitLabClient {
     }
 
     /// Closes an issue (`PUT /projects/:id/issues/:issue_iid`).
-    pub async fn close_issue(&self, project_path: &str, iid: u64) -> Result<crate::models::Issue, ApiError> {
+    pub async fn close_issue(
+        &self,
+        project_path: &str,
+        iid: u64,
+    ) -> Result<crate::models::Issue, ApiError> {
         let encoded = Self::encode_path(project_path);
         let endpoint = format!("projects/{encoded}/issues/{iid}");
 
@@ -534,11 +573,21 @@ impl GitLabClient {
             state_event: &'a str,
         }
 
-        self.put(&endpoint, &UpdateIssueState { state_event: "close" }).await
+        self.put(
+            &endpoint,
+            &UpdateIssueState {
+                state_event: "close",
+            },
+        )
+        .await
     }
 
     /// Reopens a closed issue (`PUT /projects/:id/issues/:issue_iid`).
-    pub async fn reopen_issue(&self, project_path: &str, iid: u64) -> Result<crate::models::Issue, ApiError> {
+    pub async fn reopen_issue(
+        &self,
+        project_path: &str,
+        iid: u64,
+    ) -> Result<crate::models::Issue, ApiError> {
         let encoded = Self::encode_path(project_path);
         let endpoint = format!("projects/{encoded}/issues/{iid}");
 
@@ -547,7 +596,13 @@ impl GitLabClient {
             state_event: &'a str,
         }
 
-        self.put(&endpoint, &UpdateIssueState { state_event: "reopen" }).await
+        self.put(
+            &endpoint,
+            &UpdateIssueState {
+                state_event: "reopen",
+            },
+        )
+        .await
     }
 
     /// Lists pipelines for a project (`GET /projects/:id/pipelines`).
@@ -590,7 +645,11 @@ impl GitLabClient {
     }
 
     /// Creates / triggers a new pipeline on a given branch (`POST /projects/:id/pipeline`).
-    pub async fn create_pipeline(&self, project_path: &str, ref_name: &str) -> Result<Pipeline, ApiError> {
+    pub async fn create_pipeline(
+        &self,
+        project_path: &str,
+        ref_name: &str,
+    ) -> Result<Pipeline, ApiError> {
         let encoded = Self::encode_path(project_path);
         let endpoint = format!("projects/{encoded}/pipeline");
 

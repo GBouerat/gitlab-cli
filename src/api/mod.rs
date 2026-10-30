@@ -6,6 +6,6 @@ pub mod client;
 pub mod error;
 pub mod pagination;
 
-pub use client::{GitLabClient, USER_AGENT_STRING};
+pub use client::{CreateMrParams, GitLabClient, USER_AGENT_STRING};
 pub use error::ApiError;
 pub use pagination::PaginationInfo;

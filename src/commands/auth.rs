@@ -132,9 +132,17 @@ async fn handle_logout(args: LogoutArgs, config: &mut Config) -> anyhow::Result<
 
     if config.remove_host(&host) {
         config.save()?;
-        println!("{} Logged out from host: {}", "✓".green().bold(), host.bold());
+        println!(
+            "{} Logged out from host: {}",
+            "✓".green().bold(),
+            host.bold()
+        );
     } else {
-        println!("{} No stored credentials found for host: {}", "!".yellow(), host);
+        println!(
+            "{} No stored credentials found for host: {}",
+            "!".yellow(),
+            host
+        );
     }
 
     Ok(())

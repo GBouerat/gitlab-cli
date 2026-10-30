@@ -5,10 +5,12 @@ edition = "2021"
 authors = ["Guillaume Bouérat <contact@bouerat.fr>"]
 description = "A fast, modular, and ergonomic command-line interface for GitLab written in Rust."
 repository = "https://github.com/GBouerat/gitlab-cli"
+homepage = "https://github.com/GBouerat/gitlab-cli"
 license = "MIT OR Apache-2.0"
 keywords = ["gitlab", "cli", "git", "ci-cd", "devops"]
 categories = ["command-line-utilities", "development-tools"]
 readme = "README.md"
+exclude = [".github", "tests", "ARCHITECTURE.md"]
 
 [lib]
 name = "gitlab_cli"

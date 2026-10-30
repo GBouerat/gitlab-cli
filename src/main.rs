@@ -33,7 +33,10 @@ async fn main() -> ExitCode {
     let config = match Config::load() {
         Ok(cfg) => cfg,
         Err(err) => {
-            eprintln!("{}: Failed to load configuration: {err}", "error".red().bold());
+            eprintln!(
+                "{}: Failed to load configuration: {err}",
+                "error".red().bold()
+            );
             return ExitCode::FAILURE;
         }
     };

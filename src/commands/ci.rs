@@ -157,11 +157,7 @@ async fn handle_trace(
     Ok(())
 }
 
-async fn handle_run(
-    args: CiRunArgs,
-    client: &GitLabClient,
-    project: &str,
-) -> anyhow::Result<()> {
+async fn handle_run(args: CiRunArgs, client: &GitLabClient, project: &str) -> anyhow::Result<()> {
     let current_dir = env::current_dir()?;
     let ref_name = match args.ref_name {
         Some(r) => r,

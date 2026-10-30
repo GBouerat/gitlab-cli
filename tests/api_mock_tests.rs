@@ -135,15 +135,15 @@ async fn test_create_and_merge_mr() {
 
     let client = GitLabClient::new(mock_server.uri(), "token").unwrap();
     let mr = client
-        .create_mr(
-            "myorg/proj",
-            "feat",
-            "main",
-            "New Feature",
-            Some("Description"),
-            true,
-            true,
-        )
+        .create_mr(&gitlab_cli::api::CreateMrParams {
+            project_path: "myorg/proj",
+            source_branch: "feat",
+            target_branch: "main",
+            title: "New Feature",
+            description: Some("Description"),
+            draft: true,
+            squash: true,
+        })
         .await
         .unwrap();
 

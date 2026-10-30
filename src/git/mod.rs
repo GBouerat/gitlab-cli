@@ -66,7 +66,10 @@ pub fn parse_remote_url(remote_url: &str) -> anyhow::Result<GitContext> {
     // Try standard URL parsing (HTTP, HTTPS, ssh://)
     if let Ok(parsed) = Url::parse(trimmed) {
         if let Some(host) = parsed.host_str() {
-            let path = parsed.path().trim_start_matches('/').trim_end_matches(".git");
+            let path = parsed
+                .path()
+                .trim_start_matches('/')
+                .trim_end_matches(".git");
             if !path.is_empty() {
                 return Ok(GitContext::new(host.to_string(), path.to_string()));
             }
