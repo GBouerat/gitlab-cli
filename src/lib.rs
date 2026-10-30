@@ -7,7 +7,7 @@
 //! - [`api`]: Strongly-typed asynchronous HTTP client for GitLab REST API v4.
 //! - [`cli`]: Clap-based CLI structure and command-line arguments.
 //! - [`commands`]: Subcommand implementations for auth, projects, merge requests, issues, CI/CD, and completions.
-//! - [`config`]: Multi-host configuration and credential management (`~/.config/gitlab-cli/config.toml`).
+//! - [`config`]: Multi-host configuration and credential management (`~/.config/gitlab-cli/config.json`).
 //! - [`git`]: Local repository inspection, branch detection, and remote URL parsing.
 //! - [`models`]: Data models for GitLab entities (Projects, MRs, Issues, Pipelines, Jobs, Users).
 //! - [`ui`]: Terminal styling, table formatting, and cross-platform browser helpers.

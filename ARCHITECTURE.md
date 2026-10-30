@@ -78,13 +78,13 @@ Handles all network communication with the GitLab REST API:
 
 ### 2.3 `config` (`src/config/`)
 Provides multi-host configuration and credential management:
-* **Config File**: Stored in standard XDG user config directories (`~/.config/gitlab-cli/config.toml`).
+* **Config File**: Stored in standard XDG user config directories (`~/.config/gitlab-cli/config.json`).
 * **Multi-Instance Support**: Stores tokens for multiple instances (e.g. `gitlab.com` alongside internal enterprise domains like `gitlab.corp.example.com`).
 * **Precedence Order**:
   1. CLI Flags (`--host`)
   2. Git Remote Detection (`git remote get-url origin`)
   3. Environment Variables (`GITLAB_TOKEN`, `CI_JOB_TOKEN`, `GITLAB_HOST`)
-  4. Configured Host in `config.toml`
+  4. Configured Host in `config.json`
   5. Default Host (`gitlab.com`)
 
 ### 2.4 `git` (`src/git/`)

@@ -2,7 +2,7 @@
 //!
 //! Stores and retrieves authentication tokens and instance preferences across multiple
 //! GitLab hosts (e.g., `gitlab.com` alongside self-hosted instances).
-//! Configuration files are persisted in the user's config directory (typically `~/.config/gitlab-cli/config.toml`).
+//! Configuration files are persisted in the user's config directory (typically `~/.config/gitlab-cli/config.json`).
 
 use directories::ProjectDirs;
 use serde::{Deserialize, Serialize};
@@ -40,7 +40,7 @@ fn default_host() -> String {
 }
 
 impl Config {
-    /// Returns the standard path to the configuration file (`~/.config/gitlab-cli/config.toml`).
+    /// Returns the standard path to the configuration file (`~/.config/gitlab-cli/config.json`).
     ///
     /// # Errors
     ///
@@ -48,7 +48,7 @@ impl Config {
     pub fn config_path() -> anyhow::Result<PathBuf> {
         if let Some(dirs) = ProjectDirs::from("com", "gitlab-cli", "gitlab-cli") {
             let config_dir = dirs.config_dir();
-            Ok(config_dir.join("config.toml"))
+            Ok(config_dir.join("config.json"))
         } else {
             anyhow::bail!("Unable to determine standard configuration directory")
         }
@@ -60,7 +60,7 @@ impl Config {
     ///
     /// # Errors
     ///
-    /// Returns an error if the file exists but cannot be read or parsed as TOML.
+    /// Returns an error if the file exists but cannot be read or parsed as JSON.
     pub fn load() -> anyhow::Result<Self> {
         let path = Self::config_path()?;
         Self::load_from_path(&path)
@@ -72,7 +72,7 @@ impl Config {
     ///
     /// # Arguments
     ///
-    /// * `path` - The path to the TOML configuration file.
+    /// * `path` - The path to the JSON configuration file.
     ///
     /// # Errors
     ///
@@ -86,7 +86,7 @@ impl Config {
         }
 
         let content = fs::read_to_string(path)?;
-        let config: Config = toml::from_str(&content)?;
+        let config: Config = serde_json::from_str(&content)?;
         Ok(config)
     }
 
@@ -115,7 +115,7 @@ impl Config {
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)?;
         }
-        let serialized = toml::to_string_pretty(self)?;
+        let serialized = serde_json::to_string_pretty(self)?;
         fs::write(path, serialized)?;
         Ok(())
     }

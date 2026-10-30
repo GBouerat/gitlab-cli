@@ -12,6 +12,8 @@ A fast, modular, and ergonomic command-line interface for GitLab written in Rust
   - Strict documentation checks: `RUSTDOCFLAGS="-D warnings" cargo doc --no-deps`.
   - Maintain `ARCHITECTURE.md` alongside `README.md`.
   - Append `*Generated entirely by Gemini through Antigravity.*` at the end of `README.md`.
+- **Configuration**:
+  - Multi-host configuration stored in JSON format at `~/.config/gitlab-cli/config.json`.
 - **Terminal Tables**:
   - Format tables using `comfy-table`.
   - Do not embed raw ANSI escape sequences inside cell strings; use `Cell::new(...).fg(Color::...)` and `Attribute::Bold`.
