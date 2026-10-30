@@ -21,4 +21,4 @@ pub mod models;
 pub mod ui;
 
 pub use api::client::GitLabClient;
-pub use config::Config;
+pub use config::{Config, ResolvedAuth};

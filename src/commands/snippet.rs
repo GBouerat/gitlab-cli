@@ -125,10 +125,11 @@ async fn handle_create(args: SnippetCreateArgs, client: &GitLabClient) -> anyhow
         None => Text::new("File Name (e.g. snippet.txt):").prompt()?,
     };
 
-    let content = match args.file {
-        Some(ref f) if f == "-" => io::read_to_string(io::stdin())?,
-        Some(ref f) => fs::read_to_string(f)?,
-        None => Text::new("Snippet Content:").prompt()?,
+    let content = match (args.content, args.file) {
+        (Some(c), _) => c,
+        (None, Some(ref f)) if f == "-" => io::read_to_string(io::stdin())?,
+        (None, Some(ref f)) => fs::read_to_string(f)?,
+        (None, None) => Text::new("Snippet Content:").prompt()?,
     };
 
     let snippet = client

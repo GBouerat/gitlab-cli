@@ -222,7 +222,7 @@ async fn test_pipeline_and_job_trace_stream() {
         "sha": "abcdef1234567890",
         "ref": "main",
         "status": "success",
-        "duration": 45
+        "duration": 45.8
     });
 
     Mock::given(method("GET"))
@@ -243,6 +243,7 @@ async fn test_pipeline_and_job_trace_stream() {
     let pipe = client.get_pipeline("group/repo", 999).await.unwrap();
     assert_eq!(pipe.id, 999);
     assert_eq!(pipe.status, "success");
+    assert_eq!(pipe.duration, Some(45.8));
 
     let mut output_bytes = Vec::new();
     client
@@ -1201,4 +1202,57 @@ async fn test_packages_and_registry() {
         .delete_registry_repository("group/repo", 2)
         .await
         .unwrap();
+}
+
+#[tokio::test]
+async fn test_job_token_header_authentication() {
+    let mock_server = MockServer::start().await;
+
+    let user_json = serde_json::json!({
+        "id": 99,
+        "username": "ci-runner",
+        "name": "CI Runner",
+        "state": "active"
+    });
+
+    Mock::given(method("GET"))
+        .and(path("/api/v4/user"))
+        .and(header("JOB-TOKEN", "jwt-job-token-xyz"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(&user_json))
+        .mount(&mock_server)
+        .await;
+
+    let client =
+        GitLabClient::with_job_token(mock_server.uri(), "jwt-job-token-xyz", true).unwrap();
+    let user = client.current_user().await.unwrap();
+    assert_eq!(user.username, "ci-runner");
+}
+
+#[tokio::test]
+async fn test_set_variable_validation_error_does_not_put() {
+    let mock_server = MockServer::start().await;
+
+    // Simulate POST returning 400 for invalid masked value (not 'already taken')
+    Mock::given(method("POST"))
+        .and(path("/api/v4/projects/group%2Frepo/variables"))
+        .respond_with(ResponseTemplate::new(400).set_body_json(serde_json::json!({
+            "message": {"value": ["is invalid - must be at least 8 characters"]}
+        })))
+        .mount(&mock_server)
+        .await;
+
+    let client = GitLabClient::new(mock_server.uri(), "test-token").unwrap();
+
+    let err = client
+        .set_variable("group/repo", "SECRET", "short", true, false, None)
+        .await
+        .unwrap_err();
+
+    match err {
+        gitlab_cli::api::error::ApiError::GitLab { status, message } => {
+            assert_eq!(status, reqwest::StatusCode::BAD_REQUEST);
+            assert!(message.contains("is invalid"));
+        }
+        other => panic!("Expected GitLab ApiError, got {:?}", other),
+    }
 }

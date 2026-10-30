@@ -34,8 +34,8 @@ pub struct BranchListArgs {
 /// Arguments for `gitlab branch view`.
 #[derive(Args, Debug)]
 pub struct BranchViewArgs {
-    /// Branch name.
-    pub branch: String,
+    /// Branch name (defaults to currently checked out branch).
+    pub branch: Option<String>,
 
     /// Open branch in web browser.
     #[arg(short = 'w', long)]

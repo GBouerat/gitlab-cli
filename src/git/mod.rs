@@ -49,15 +49,21 @@ impl GitContext {
 pub fn parse_remote_url(remote_url: &str) -> anyhow::Result<GitContext> {
     let trimmed = remote_url.trim();
 
-    // Check for SSH scp-like syntax: git@host:owner/repo.git
-    if let Some(rest) = trimmed.strip_prefix("git@") {
-        if let Some((host, path_with_git)) = rest.split_once(':') {
+    // Check for SSH scp-like syntax: [user@]host:owner/repo.git
+    if !trimmed.contains("://") {
+        if let Some((user_host, path_with_git)) = trimmed.split_once(':') {
+            let host = if let Some((_user, h)) = user_host.split_once('@') {
+                h
+            } else {
+                user_host
+            };
+
             // Strip any leading slashes and trailing .git
             let clean_path = path_with_git
                 .trim_start_matches('/')
                 .trim_end_matches(".git");
 
-            if !clean_path.is_empty() {
+            if !host.is_empty() && !clean_path.is_empty() && !host.contains('/') {
                 return Ok(GitContext::new(host.to_string(), clean_path.to_string()));
             }
         }
@@ -153,6 +159,14 @@ mod tests {
         let ctx = parse_remote_url("git@gitlab.com:owner/repo.git").unwrap();
         assert_eq!(ctx.host, "gitlab.com");
         assert_eq!(ctx.project_path, "owner/repo");
+    }
+
+    #[test]
+    fn test_parse_ssh_custom_user() {
+        let ctx =
+            parse_remote_url("custom-user@gitlab.mycorp.org:team/deep/sub/project.git").unwrap();
+        assert_eq!(ctx.host, "gitlab.mycorp.org");
+        assert_eq!(ctx.project_path, "team/deep/sub/project");
     }
 
     #[test]

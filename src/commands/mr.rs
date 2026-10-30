@@ -226,13 +226,28 @@ async fn handle_checkout(
         mr.iid
     );
 
-    let refspec = format!("{branch}:refs/remotes/origin/{branch}");
+    let mr_head_ref = format!("refs/merge-requests/{}/head:{}", mr.iid, branch);
     let fetch_status = Command::new("git")
-        .args(["fetch", "origin", &refspec])
-        .status()?;
+        .args(["fetch", "origin", &mr_head_ref])
+        .status();
 
-    if !fetch_status.success() {
-        anyhow::bail!("Failed to fetch branch '{branch}' from origin");
+    let fetch_ok = match fetch_status {
+        Ok(s) if s.success() => true,
+        _ => {
+            let refspec = format!("{branch}:refs/remotes/origin/{branch}");
+            Command::new("git")
+                .args(["fetch", "origin", &refspec])
+                .status()
+                .map(|s| s.success())
+                .unwrap_or(false)
+        }
+    };
+
+    if !fetch_ok {
+        anyhow::bail!(
+            "Failed to fetch merge request !{} branch '{branch}' from origin",
+            mr.iid
+        );
     }
 
     let checkout_status = Command::new("git").args(["checkout", branch]).status()?;

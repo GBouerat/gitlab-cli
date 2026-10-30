@@ -47,12 +47,12 @@ pub async fn run_command(cli: Cli, mut config: Config) -> anyhow::Result<()> {
             let current_dir = env::current_dir().unwrap_or_default();
             let git_ctx = resolve_git_context(&current_dir).ok();
 
-            let (host, token) = config.resolve_auth(
+            let auth = config.resolve_auth(
                 cli.host.as_deref(),
                 git_ctx.as_ref().map(|g| g.host.as_str()),
             )?;
 
-            let client = GitLabClient::new(&host, &token)?;
+            let client = GitLabClient::with_job_token(&auth.host, &auth.token, auth.is_job_token)?;
 
             let default_project = cli
                 .repo

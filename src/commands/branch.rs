@@ -85,7 +85,13 @@ async fn handle_view(
     project: &str,
     json_mode: bool,
 ) -> anyhow::Result<()> {
-    let branch = client.get_branch(project, &args.branch).await?;
+    let current_dir = env::current_dir().unwrap_or_default();
+    let branch_name = match args.branch {
+        Some(b) => b,
+        None => get_current_branch(&current_dir)?,
+    };
+
+    let branch = client.get_branch(project, &branch_name).await?;
 
     if args.web {
         if let Some(url) = &branch.web_url {
@@ -93,12 +99,6 @@ async fn handle_view(
             crate::ui::open_in_browser(url);
             return Ok(());
         }
-    }
-
-    if json_mode {
-        let json = serde_json::to_string_pretty(&branch)?;
-        println!("{json}");
-        return Ok(());
     }
 
     let mut table = create_table(&["Property", "Value"]);
@@ -138,8 +138,7 @@ async fn handle_view(
         table.add_row(vec![Cell::new("Web URL"), Cell::new(web)]);
     }
 
-    println!("{table}");
-    Ok(())
+    print_json_or_table(&branch, &table, json_mode)
 }
 
 async fn handle_create(

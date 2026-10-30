@@ -53,12 +53,6 @@ async fn handle_view(
         }
     }
 
-    if json_mode {
-        let json = serde_json::to_string_pretty(&project)?;
-        println!("{json}");
-        return Ok(());
-    }
-
     let mut table = create_table(&["Property", "Value"]);
     table.add_row(vec![
         Cell::new("Name"),
@@ -108,8 +102,7 @@ async fn handle_view(
         )),
     ]);
 
-    println!("{table}");
-    Ok(())
+    print_json_or_table(&project, &table, json_mode)
 }
 
 async fn handle_list(

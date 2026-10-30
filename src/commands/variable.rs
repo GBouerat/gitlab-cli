@@ -80,12 +80,6 @@ async fn handle_get(
 ) -> anyhow::Result<()> {
     let variable = client.get_variable(project, &args.key).await?;
 
-    if json_mode {
-        let json = serde_json::to_string_pretty(&variable)?;
-        println!("{json}");
-        return Ok(());
-    }
-
     let mut table = create_table(&["Property", "Value"]);
     table.add_row(vec![
         Cell::new("Key"),
@@ -124,8 +118,7 @@ async fn handle_get(
         table.add_row(vec![Cell::new("Description"), Cell::new(desc)]);
     }
 
-    println!("{table}");
-    Ok(())
+    print_json_or_table(&variable, &table, json_mode)
 }
 
 async fn handle_set(

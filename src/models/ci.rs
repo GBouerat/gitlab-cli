@@ -33,7 +33,7 @@ pub struct Pipeline {
     pub web_url: Option<String>,
     /// Execution duration in seconds.
     #[serde(default)]
-    pub duration: Option<u64>,
+    pub duration: Option<f64>,
     /// Time queued waiting for a runner in seconds.
     #[serde(default)]
     pub queued_duration: Option<f64>,

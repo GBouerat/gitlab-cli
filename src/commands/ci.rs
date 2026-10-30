@@ -110,7 +110,7 @@ async fn handle_view(
     pipe_table.add_row(vec![Cell::new("Ref"), Cell::new(&pipeline.ref_name)]);
     pipe_table.add_row(vec![Cell::new("Commit SHA"), Cell::new(&pipeline.sha)]);
     if let Some(dur) = pipeline.duration {
-        pipe_table.add_row(vec![Cell::new("Duration"), Cell::new(format!("{dur}s"))]);
+        pipe_table.add_row(vec![Cell::new("Duration"), Cell::new(format!("{dur:.0}s"))]);
     }
     if let Some(web) = &pipeline.web_url {
         pipe_table.add_row(vec![Cell::new("Web URL"), Cell::new(web)]);

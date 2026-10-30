@@ -32,6 +32,7 @@ const MAX_RATE_LIMIT_RETRIES: u32 = 3;
 pub struct GitLabClient {
     host: String,
     token: String,
+    is_job_token: bool,
     base_url: Url,
     http: Client,
 }
@@ -67,6 +68,25 @@ impl GitLabClient {
     ///
     /// Returns an [`ApiError`] if the constructed base URL is invalid.
     pub fn new(host: impl Into<String>, token: impl Into<String>) -> Result<Self, ApiError> {
+        Self::with_job_token(host, token, false)
+    }
+
+    /// Creates a new client instance specifying whether the token is a GitLab CI `JOB-TOKEN`.
+    ///
+    /// # Arguments
+    ///
+    /// * `host` - GitLab instance hostname or base URL.
+    /// * `token` - Authentication token.
+    /// * `is_job_token` - Whether the token is a CI job token requiring the `JOB-TOKEN` header.
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`ApiError`] if the constructed base URL is invalid.
+    pub fn with_job_token(
+        host: impl Into<String>,
+        token: impl Into<String>,
+        is_job_token: bool,
+    ) -> Result<Self, ApiError> {
         let host_str = host.into();
         let token_str = token.into();
 
@@ -90,6 +110,7 @@ impl GitLabClient {
         Ok(Self {
             host: host_str,
             token: token_str,
+            is_job_token,
             base_url,
             http,
         })
@@ -109,7 +130,11 @@ impl GitLabClient {
 
     /// Attaches authentication header to a request builder.
     fn authenticate(&self, builder: RequestBuilder) -> RequestBuilder {
-        builder.header("PRIVATE-TOKEN", &self.token)
+        if self.is_job_token {
+            builder.header("JOB-TOKEN", &self.token)
+        } else {
+            builder.header("PRIVATE-TOKEN", &self.token)
+        }
     }
 
     /// Executes an HTTP request with automatic rate-limit backoff handling.
@@ -896,8 +921,13 @@ impl GitLabClient {
             .await
         {
             Ok(v) => Ok(v),
-            Err(ApiError::GitLab { status, .. }) if status == StatusCode::BAD_REQUEST => {
-                // If it already exists, update via PUT
+            Err(ApiError::GitLab {
+                status,
+                ref message,
+            }) if status == StatusCode::BAD_REQUEST
+                && (message.contains("already") || message.contains("taken")) =>
+            {
+                // If the key already exists, update via PUT
                 let update_endpoint = format!("projects/{encoded}/variables/{key}");
                 self.put(&update_endpoint, &body).await
             }

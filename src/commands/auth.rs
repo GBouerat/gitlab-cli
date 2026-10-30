@@ -79,12 +79,15 @@ async fn handle_status(args: StatusArgs, config: &Config) -> anyhow::Result<()> 
     });
 
     match config.resolve_auth(Some(&host), None) {
-        Ok((resolved_host, token)) => {
-            let client = GitLabClient::new(&resolved_host, &token)?;
+        Ok(auth) => {
+            let client = GitLabClient::with_job_token(&auth.host, &auth.token, auth.is_job_token)?;
             match client.current_user().await {
                 Ok(user) => {
-                    let masked_token = if token.len() > 8 {
-                        format!("{}...{}", &token[..4], &token[token.len() - 4..])
+                    let chars: Vec<char> = auth.token.chars().collect();
+                    let masked_token = if chars.len() > 8 {
+                        let prefix: String = chars[..4].iter().collect();
+                        let suffix: String = chars[chars.len() - 4..].iter().collect();
+                        format!("{prefix}...{suffix}")
                     } else {
                         "***".to_string()
                     };
@@ -92,17 +95,20 @@ async fn handle_status(args: StatusArgs, config: &Config) -> anyhow::Result<()> 
                     println!(
                         "{} Authenticated with GitLab host: {}",
                         "✓".green().bold(),
-                        resolved_host.bold()
+                        auth.host.bold()
                     );
                     println!("  Username: {}", user.username.cyan().bold());
                     println!("  Name:     {}", user.name);
                     println!("  Token:    {}", masked_token);
+                    if auth.is_job_token {
+                        println!("  Type:     CI_JOB_TOKEN");
+                    }
                 }
                 Err(err) => {
                     println!(
                         "{} Token configured for host '{}' failed validation: {}",
                         "✗".red().bold(),
-                        resolved_host,
+                        auth.host,
                         err
                     );
                 }

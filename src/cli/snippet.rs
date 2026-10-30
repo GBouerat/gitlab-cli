@@ -61,6 +61,10 @@ pub struct SnippetCreateArgs {
     #[arg(short = 'c', long)]
     pub file: Option<String>,
 
+    /// Raw snippet content string directly provided via argument.
+    #[arg(long)]
+    pub content: Option<String>,
+
     /// Visibility level (`public`, `internal`, or `private`, default: `private`).
     #[arg(long, default_value = "private")]
     pub visibility: String,

@@ -39,6 +39,17 @@ fn default_host() -> String {
     DEFAULT_GITLAB_HOST.to_string()
 }
 
+/// Resolved GitLab authentication credentials.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ResolvedAuth {
+    /// Resolved GitLab instance hostname.
+    pub host: String,
+    /// Resolved access or job token.
+    pub token: String,
+    /// Whether the token is a GitLab CI job token requiring the `JOB-TOKEN` header.
+    pub is_job_token: bool,
+}
+
 impl Config {
     /// Returns the standard path to the configuration file (`~/.config/gitlab-cli/config.json`).
     ///
@@ -179,7 +190,7 @@ impl Config {
     ///
     /// Resolution order:
     /// 1. Host: CLI `--host` flag > Git remote host > `GITLAB_HOST` env > `config.default_host` > `gitlab.com`.
-    /// 2. Token: `GITLAB_TOKEN` env > Stored token for resolved host.
+    /// 2. Token: `GITLAB_TOKEN` env > `CI_JOB_TOKEN` env > Stored token for resolved host.
     ///
     /// # Arguments
     ///
@@ -193,7 +204,7 @@ impl Config {
         &self,
         cli_host: Option<&str>,
         git_host: Option<&str>,
-    ) -> anyhow::Result<(String, String)> {
+    ) -> anyhow::Result<ResolvedAuth> {
         // Resolve host
         let host = if let Some(h) = cli_host {
             h.to_string()
@@ -214,18 +225,30 @@ impl Config {
         // Resolve token: check GITLAB_TOKEN or CI_JOB_TOKEN environment variable first
         if let Ok(env_token) = std::env::var("GITLAB_TOKEN") {
             if !env_token.trim().is_empty() {
-                return Ok((host, env_token.trim().to_string()));
+                return Ok(ResolvedAuth {
+                    host,
+                    token: env_token.trim().to_string(),
+                    is_job_token: false,
+                });
             }
         }
         if let Ok(ci_token) = std::env::var("CI_JOB_TOKEN") {
             if !ci_token.trim().is_empty() {
-                return Ok((host, ci_token.trim().to_string()));
+                return Ok(ResolvedAuth {
+                    host,
+                    token: ci_token.trim().to_string(),
+                    is_job_token: true,
+                });
             }
         }
 
         // Look up token in stored host config
         if let Some(host_cfg) = self.hosts.get(&host) {
-            return Ok((host, host_cfg.token.clone()));
+            return Ok(ResolvedAuth {
+                host,
+                token: host_cfg.token.clone(),
+                is_job_token: false,
+            });
         }
 
         anyhow::bail!(
@@ -299,14 +322,32 @@ mod tests {
     fn test_resolve_auth_with_env_token() {
         let _guard = ENV_LOCK.lock().unwrap();
         std::env::set_var("GITLAB_TOKEN", "env-secret-token");
+        std::env::remove_var("CI_JOB_TOKEN");
         std::env::remove_var("GITLAB_HOST");
 
         let config = Config::default();
-        let (host, token) = config.resolve_auth(None, None).unwrap();
-        assert_eq!(host, "gitlab.com");
-        assert_eq!(token, "env-secret-token");
+        let auth = config.resolve_auth(None, None).unwrap();
+        assert_eq!(auth.host, "gitlab.com");
+        assert_eq!(auth.token, "env-secret-token");
+        assert!(!auth.is_job_token);
 
         std::env::remove_var("GITLAB_TOKEN");
+    }
+
+    #[test]
+    fn test_resolve_auth_with_ci_job_token() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        std::env::remove_var("GITLAB_TOKEN");
+        std::env::set_var("CI_JOB_TOKEN", "ci-job-jwt-token");
+        std::env::remove_var("GITLAB_HOST");
+
+        let config = Config::default();
+        let auth = config.resolve_auth(None, None).unwrap();
+        assert_eq!(auth.host, "gitlab.com");
+        assert_eq!(auth.token, "ci-job-jwt-token");
+        assert!(auth.is_job_token);
+
+        std::env::remove_var("CI_JOB_TOKEN");
     }
 
     #[test]
@@ -319,11 +360,12 @@ mod tests {
         let mut config = Config::default();
         config.set_host_token("gitlab.example.com", "cfg-token", None);
 
-        let (host, token) = config
+        let auth = config
             .resolve_auth(Some("gitlab.example.com"), None)
             .unwrap();
-        assert_eq!(host, "gitlab.example.com");
-        assert_eq!(token, "cfg-token");
+        assert_eq!(auth.host, "gitlab.example.com");
+        assert_eq!(auth.token, "cfg-token");
+        assert!(!auth.is_job_token);
     }
 
     #[test]
