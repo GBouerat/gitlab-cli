@@ -1,0 +1,57 @@
+[package]
+name = "gitlab-cli"
+version = "0.1.0"
+edition = "2021"
+authors = ["Guillaume Bouérat <contact@bouerat.fr>"]
+description = "A fast, modular, and ergonomic command-line interface for GitLab written in Rust."
+repository = "https://github.com/GBouerat/gitlab-cli"
+license = "MIT OR Apache-2.0"
+keywords = ["gitlab", "cli", "git", "ci-cd", "devops"]
+categories = ["command-line-utilities", "development-tools"]
+readme = "README.md"
+
+[lib]
+name = "gitlab_cli"
+path = "src/lib.rs"
+
+[[bin]]
+name = "gitlab"
+path = "src/main.rs"
+
+[dependencies]
+# CLI parsing and completions
+clap = { version = "4.5", features = ["derive", "cargo", "env"] }
+clap_complete = "4.5"
+
+# Asynchronous runtime and HTTP client
+tokio = { version = "1.40", features = ["full"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "stream"] }
+futures-util = "0.3"
+
+# Serialization and configuration
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+toml = "0.8"
+chrono = { version = "0.4", features = ["serde"] }
+
+# Terminal UI and formatting
+comfy-table = "7.1"
+colored = "2.1"
+inquire = "0.7"
+
+# System paths, URLs, and errors
+directories = "5.0"
+url = "2.5"
+regex = "1.10"
+thiserror = "1.0"
+anyhow = "1.0"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[dev-dependencies]
+wiremock = "0.6"
+tempfile = "3.12"
+assert_cmd = "2.0"
+predicates = "3.1"

@@ -1,0 +1,10 @@
+# Generated build artifacts
+/target
+
+# OS / Editor files
+.DS_Store
+*.swp
+*.bak
+*~
+.idea/
+.vscode/
