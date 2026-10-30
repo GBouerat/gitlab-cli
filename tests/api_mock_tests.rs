@@ -290,3 +290,353 @@ async fn test_rate_limit_backoff_and_retry() {
     assert_eq!(user.username, "rate_limited_user");
     assert_eq!(request_count.load(Ordering::SeqCst), 2);
 }
+
+#[tokio::test]
+async fn test_releases_operations() {
+    let mock_server = MockServer::start().await;
+
+    let release_json = serde_json::json!({
+        "tag_name": "v1.0.0",
+        "name": "Initial Release",
+        "description": "First stable release",
+        "created_at": "2026-01-01T00:00:00Z",
+        "released_at": "2026-01-01T00:00:00Z",
+        "_links": {
+            "self": "https://gitlab.example.com/api/v4/projects/1/releases/v1.0.0"
+        }
+    });
+
+    // List releases
+    Mock::given(method("GET"))
+        .and(path("/api/v4/projects/group%2Frepo/releases"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([release_json])))
+        .mount(&mock_server)
+        .await;
+
+    // Get release
+    Mock::given(method("GET"))
+        .and(path("/api/v4/projects/group%2Frepo/releases/v1.0.0"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(&release_json))
+        .mount(&mock_server)
+        .await;
+
+    // Create release
+    Mock::given(method("POST"))
+        .and(path("/api/v4/projects/group%2Frepo/releases"))
+        .respond_with(ResponseTemplate::new(201).set_body_json(&release_json))
+        .mount(&mock_server)
+        .await;
+
+    // Delete release
+    Mock::given(method("DELETE"))
+        .and(path("/api/v4/projects/group%2Frepo/releases/v1.0.0"))
+        .respond_with(ResponseTemplate::new(200))
+        .mount(&mock_server)
+        .await;
+
+    let client = GitLabClient::new(mock_server.uri(), "test-token").unwrap();
+
+    let list = client.list_releases("group/repo", Some(10)).await.unwrap();
+    assert_eq!(list.len(), 1);
+    assert_eq!(list[0].tag_name, "v1.0.0");
+
+    let single = client.get_release("group/repo", "v1.0.0").await.unwrap();
+    assert_eq!(single.tag_name, "v1.0.0");
+    assert_eq!(single.name, "Initial Release");
+
+    let created = client
+        .create_release(
+            "group/repo",
+            "v1.0.0",
+            Some("Initial Release"),
+            Some("First stable release"),
+            Some("main"),
+        )
+        .await
+        .unwrap();
+    assert_eq!(created.tag_name, "v1.0.0");
+
+    client.delete_release("group/repo", "v1.0.0").await.unwrap();
+}
+
+#[tokio::test]
+async fn test_branches_operations() {
+    let mock_server = MockServer::start().await;
+
+    let branch_json = serde_json::json!({
+        "name": "feature/awesome",
+        "merged": false,
+        "protected": false,
+        "default": false,
+        "web_url": "https://gitlab.example.com/group/repo/-/tree/feature/awesome",
+        "commit": {
+            "id": "1234567890abcdef",
+            "short_id": "12345678",
+            "title": "Add feature",
+            "author_name": "Developer"
+        }
+    });
+
+    // List branches
+    Mock::given(method("GET"))
+        .and(path("/api/v4/projects/group%2Frepo/repository/branches"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([branch_json])))
+        .mount(&mock_server)
+        .await;
+
+    // Get branch
+    Mock::given(method("GET"))
+        .and(path(
+            "/api/v4/projects/group%2Frepo/repository/branches/feature%2Fawesome",
+        ))
+        .respond_with(ResponseTemplate::new(200).set_body_json(&branch_json))
+        .mount(&mock_server)
+        .await;
+
+    // Create branch
+    Mock::given(method("POST"))
+        .and(path("/api/v4/projects/group%2Frepo/repository/branches"))
+        .respond_with(ResponseTemplate::new(201).set_body_json(&branch_json))
+        .mount(&mock_server)
+        .await;
+
+    // Delete branch
+    Mock::given(method("DELETE"))
+        .and(path(
+            "/api/v4/projects/group%2Frepo/repository/branches/feature%2Fawesome",
+        ))
+        .respond_with(ResponseTemplate::new(204))
+        .mount(&mock_server)
+        .await;
+
+    let client = GitLabClient::new(mock_server.uri(), "test-token").unwrap();
+
+    let list = client.list_branches("group/repo", Some(10)).await.unwrap();
+    assert_eq!(list.len(), 1);
+    assert_eq!(list[0].name, "feature/awesome");
+
+    let single = client
+        .get_branch("group/repo", "feature/awesome")
+        .await
+        .unwrap();
+    assert_eq!(single.name, "feature/awesome");
+
+    let created = client
+        .create_branch("group/repo", "feature/awesome", "main")
+        .await
+        .unwrap();
+    assert_eq!(created.name, "feature/awesome");
+
+    client
+        .delete_branch("group/repo", "feature/awesome")
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn test_groups_and_members() {
+    let mock_server = MockServer::start().await;
+
+    let group_json = serde_json::json!({
+        "id": 10,
+        "name": "Core Platform",
+        "path": "core",
+        "full_name": "Core Platform",
+        "full_path": "core",
+        "visibility": "public",
+        "web_url": "https://gitlab.example.com/groups/core"
+    });
+
+    let member_json = serde_json::json!({
+        "id": 101,
+        "username": "alice",
+        "name": "Alice Smith",
+        "state": "active",
+        "access_level": 40
+    });
+
+    Mock::given(method("GET"))
+        .and(path("/api/v4/groups"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([group_json])))
+        .mount(&mock_server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path("/api/v4/groups/core"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(&group_json))
+        .mount(&mock_server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path("/api/v4/groups/core/members"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([member_json])))
+        .mount(&mock_server)
+        .await;
+
+    let client = GitLabClient::new(mock_server.uri(), "test-token").unwrap();
+
+    let groups = client.list_groups(None, Some(5)).await.unwrap();
+    assert_eq!(groups.len(), 1);
+    assert_eq!(groups[0].name, "Core Platform");
+
+    let group = client.get_group("core").await.unwrap();
+    assert_eq!(group.id, 10);
+    assert_eq!(group.full_path, "core");
+
+    let members = client.list_group_members("core", Some(5)).await.unwrap();
+    assert_eq!(members.len(), 1);
+    assert_eq!(members[0].username, "alice");
+    assert_eq!(members[0].access_level, 40);
+}
+
+#[tokio::test]
+async fn test_variables_operations_with_put_fallback() {
+    let mock_server = MockServer::start().await;
+
+    let var_json = serde_json::json!({
+        "variable_type": "env_var",
+        "key": "DATABASE_URL",
+        "value": "postgres://localhost/db",
+        "protected": true,
+        "masked": true,
+        "environment_scope": "*"
+    });
+
+    Mock::given(method("GET"))
+        .and(path("/api/v4/projects/group%2Frepo/variables"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([var_json])))
+        .mount(&mock_server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path("/api/v4/projects/group%2Frepo/variables/DATABASE_URL"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(&var_json))
+        .mount(&mock_server)
+        .await;
+
+    // Simulate POST returning 400 (already exists)
+    Mock::given(method("POST"))
+        .and(path("/api/v4/projects/group%2Frepo/variables"))
+        .respond_with(ResponseTemplate::new(400).set_body_json(serde_json::json!({
+            "message": {"key": ["has already been taken"]}
+        })))
+        .mount(&mock_server)
+        .await;
+
+    // PUT fallback succeeds
+    Mock::given(method("PUT"))
+        .and(path("/api/v4/projects/group%2Frepo/variables/DATABASE_URL"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(&var_json))
+        .mount(&mock_server)
+        .await;
+
+    Mock::given(method("DELETE"))
+        .and(path("/api/v4/projects/group%2Frepo/variables/DATABASE_URL"))
+        .respond_with(ResponseTemplate::new(204))
+        .mount(&mock_server)
+        .await;
+
+    let client = GitLabClient::new(mock_server.uri(), "test-token").unwrap();
+
+    let list = client.list_variables("group/repo", Some(5)).await.unwrap();
+    assert_eq!(list.len(), 1);
+    assert_eq!(list[0].key, "DATABASE_URL");
+
+    let var = client
+        .get_variable("group/repo", "DATABASE_URL")
+        .await
+        .unwrap();
+    assert_eq!(var.key, "DATABASE_URL");
+    assert_eq!(var.masked, Some(true));
+
+    // Set variable falls back to PUT on 400
+    let updated = client
+        .set_variable(
+            "group/repo",
+            "DATABASE_URL",
+            "postgres://localhost/db",
+            true,
+            true,
+            Some("*"),
+        )
+        .await
+        .unwrap();
+    assert_eq!(updated.key, "DATABASE_URL");
+
+    client
+        .delete_variable("group/repo", "DATABASE_URL")
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn test_snippets_operations() {
+    let mock_server = MockServer::start().await;
+
+    let snippet_json = serde_json::json!({
+        "id": 42,
+        "title": "Example Script",
+        "file_name": "test.sh",
+        "description": "Useful test helper",
+        "visibility": "private",
+        "web_url": "https://gitlab.example.com/snippets/42",
+        "raw_url": "https://gitlab.example.com/snippets/42/raw",
+        "updated_at": "2026-01-01T12:00:00Z"
+    });
+
+    Mock::given(method("GET"))
+        .and(path("/api/v4/snippets"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([snippet_json])))
+        .mount(&mock_server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path("/api/v4/snippets/42"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(&snippet_json))
+        .mount(&mock_server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path("/api/v4/snippets/42/raw"))
+        .respond_with(ResponseTemplate::new(200).set_body_string("echo 'hello world'"))
+        .mount(&mock_server)
+        .await;
+
+    Mock::given(method("POST"))
+        .and(path("/api/v4/snippets"))
+        .respond_with(ResponseTemplate::new(201).set_body_json(&snippet_json))
+        .mount(&mock_server)
+        .await;
+
+    Mock::given(method("DELETE"))
+        .and(path("/api/v4/snippets/42"))
+        .respond_with(ResponseTemplate::new(204))
+        .mount(&mock_server)
+        .await;
+
+    let client = GitLabClient::new(mock_server.uri(), "test-token").unwrap();
+
+    let list = client.list_snippets(Some(5)).await.unwrap();
+    assert_eq!(list.len(), 1);
+    assert_eq!(list[0].id, 42);
+
+    let snippet = client.get_snippet(42).await.unwrap();
+    assert_eq!(snippet.title, "Example Script");
+
+    let raw = client.get_snippet_raw(42).await.unwrap();
+    assert_eq!(raw, "echo 'hello world'");
+
+    let created = client
+        .create_snippet(
+            "Example Script",
+            "test.sh",
+            "echo 'hello world'",
+            "private",
+            Some("Useful test helper"),
+        )
+        .await
+        .unwrap();
+    assert_eq!(created.id, 42);
+
+    client.delete_snippet(42).await.unwrap();
+}

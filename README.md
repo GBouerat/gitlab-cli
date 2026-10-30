@@ -15,6 +15,11 @@ A fast, modular, and ergonomic command-line interface for GitLab written in Rust
 - **Merge Requests (`gitlab mr`)**: List, view, create, checkout, merge, close, and reopen merge requests directly from the terminal.
 - **CI/CD Pipelines & Real-time Logs (`gitlab ci`)**: Inspect pipeline statuses, view job stages, trigger runs, and stream live job logs (`gitlab ci trace`).
 - **Issue Tracking (`gitlab issue`)**: View and manage issues with label and state filtering.
+- **Project Releases (`gitlab release`)**: List, view, create, and delete releases with release notes and tag associations.
+- **Repository Branches (`gitlab branch`)**: Inspect branches, track default and protected states, create new branches, and delete branches.
+- **Groups & Members (`gitlab group`)**: Browse namespaces, inspect group hierarchies, and view member permissions.
+- **CI/CD Variables (`gitlab variable`)**: Manage project environment variables, with support for masked, protected, and scoped variables.
+- **Code Snippets (`gitlab snippet`)**: Create, inspect, view raw contents, and delete personal and project snippets.
 - **Direct API Access (`gitlab api`)**: Execute authenticated REST requests with automatic project path encoding (`:id` ➔ `%2F` safe slugs).
 - **Adaptive Terminal UI**: Formatted with `comfy-table` with colored status indicators and optional `--json` export for scripting.
 - **Shell Completions**: Native auto-completions for `bash` and `zsh`.
@@ -130,7 +135,90 @@ gitlab issue list --labels "bug,critical"
 gitlab issue create --title "Parser panic on invalid token"
 ```
 
-### 6. Raw API Querying
+### 6. Releases
+
+```bash
+# List project releases
+gitlab release list
+
+# View release details
+gitlab release view v1.0.0
+
+# Create a new release
+gitlab release create v1.1.0 --name "v1.1.0 Feature Release" --ref main --description "Notes..."
+
+# Delete a release
+gitlab release delete v1.1.0
+```
+
+### 7. Branches
+
+```bash
+# List repository branches
+gitlab branch list
+
+# View branch details
+gitlab branch view feature/awesome
+
+# Create a new branch
+gitlab branch create feature/awesome --ref main
+
+# Delete a branch
+gitlab branch delete feature/awesome
+```
+
+### 8. Groups & Members
+
+```bash
+# List accessible groups
+gitlab group list
+
+# Search for a specific group
+gitlab group list --search platform
+
+# View group metadata
+gitlab group view core-platform
+
+# List group members and their access levels
+gitlab group members core-platform
+```
+
+### 9. CI/CD Variables
+
+```bash
+# List project variables
+gitlab variable list
+
+# Inspect a specific variable
+gitlab variable get DATABASE_URL
+
+# Set or update a variable
+gitlab variable set DATABASE_URL --value "postgres://localhost/db" --masked --protected
+
+# Delete a variable
+gitlab variable delete DATABASE_URL
+```
+
+### 10. Snippets
+
+```bash
+# List snippets
+gitlab snippet list
+
+# View snippet metadata
+gitlab snippet view 42
+
+# View raw snippet contents
+gitlab snippet view 42 --raw
+
+# Create a snippet from file or interactive input
+gitlab snippet create --title "Quick script" --file script.sh --content "echo hello"
+
+# Delete a snippet
+gitlab snippet delete 42
+```
+
+### 11. Raw API Querying
 
 ```bash
 # Fetch current user details
@@ -140,7 +228,7 @@ gitlab api user
 gitlab api projects/:id/pipelines
 ```
 
-### 7. Shell Completions
+### 12. Shell Completions
 
 Generate completions for your shell:
 

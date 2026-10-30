@@ -71,3 +71,24 @@ fn test_subcommand_aliases() {
     cmd_ci.args(["pipeline", "--help"]);
     cmd_ci.assert().success();
 }
+
+#[test]
+fn test_new_subcommands_help() {
+    for subcommand in ["release", "branch", "group", "variable", "snippet"] {
+        let mut cmd = Command::cargo_bin("gitlab").unwrap();
+        cmd.args([subcommand, "--help"]);
+        cmd.assert().success();
+    }
+}
+
+#[test]
+fn test_project_scoped_command_fails_without_repo() {
+    let mut cmd = Command::cargo_bin("gitlab").unwrap();
+    // Run from root or temp directory with mock token to verify missing repo error
+    cmd.args(["release", "list"])
+        .env("GITLAB_TOKEN", "mock-token")
+        .current_dir(std::env::temp_dir());
+    cmd.assert()
+        .failure()
+        .stderr(predicate::str::contains("No GitLab project specified"));
+}

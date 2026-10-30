@@ -17,6 +17,11 @@ flowchart TD
         CmdMR["mr (src/commands/mr.rs)"]
         CmdIssue["issue (src/commands/issue.rs)"]
         CmdCI["ci (src/commands/ci.rs)"]
+        CmdRel["release (src/commands/release.rs)"]
+        CmdBr["branch (src/commands/branch.rs)"]
+        CmdGrp["group (src/commands/group.rs)"]
+        CmdVar["variable (src/commands/variable.rs)"]
+        CmdSnip["snippet (src/commands/snippet.rs)"]
         CmdApi["api (src/commands/api.rs)"]
         CmdComp["completion (src/commands/completion.rs)"]
     end
@@ -42,8 +47,8 @@ flowchart TD
 
     Parser --> GitCtx
     Parser --> ConfigMgr
-    Parser --> CmdAuth & CmdProj & CmdMR & CmdIssue & CmdCI & CmdApi & CmdComp
-    CmdProj & CmdMR & CmdIssue & CmdCI & CmdApi --> Client
+    Parser --> CmdAuth & CmdProj & CmdMR & CmdIssue & CmdCI & CmdRel & CmdBr & CmdGrp & CmdVar & CmdSnip & CmdApi & CmdComp
+    CmdProj & CmdMR & CmdIssue & CmdCI & CmdRel & CmdBr & CmdGrp & CmdVar & CmdSnip & CmdApi --> Client
     Client --> AuthHdr & Encoder & Paging & Retry
     Client --> UI
     Client --> GitLabCom & SelfManaged
@@ -65,6 +70,11 @@ Declares the CLI commands, options, and flags using `clap` derive macros:
   * `mr` (alias: `merge-request`): List, view, create, checkout, merge, close, and reopen merge requests.
   * `issue`: List, view, create, close, and reopen issues.
   * `ci` (alias: `pipeline`): List pipelines, inspect jobs, trigger pipelines, and stream live job trace logs.
+  * `release`: List, view, create, and delete project releases.
+  * `branch`: List, view, create, and delete repository branches.
+  * `group`: List accessible groups, view details, and inspect group members with role permissions.
+  * `variable`: List, inspect, set (with automated POST-or-PUT fallback), and delete CI/CD project variables.
+  * `snippet`: List, view, create (with interactive or stdin content), and delete personal and project snippets.
   * `api`: Send arbitrary REST API requests directly to GitLab endpoints.
   * `completion`: Generate shell completions for `bash` and `zsh`.
 
@@ -100,6 +110,11 @@ Strongly-typed Rust structures for GitLab REST API v4 data:
 * `MergeRequest`: Details, approval states, branches, draft flags, and conflict indicators.
 * `Issue`: Issue tracker items, state, authors, and labels.
 * `Pipeline` & `Job`: CI/CD pipelines, statuses, durations, and job stage breakdowns.
+* `Release`: Project releases, tag associations, release assets, and author information.
+* `Branch`: Git branches, protection status, default branch tags, and commit summaries.
+* `Group` & `GroupMember`: Namespace groups, hierarchies, and member access levels.
+* `CiVariable`: CI/CD variables, types, masking, and environment scopes.
+* `Snippet`: Code snippets, visibility levels, file attachments, and raw content.
 
 ### 2.6 `ui` (`src/ui/`)
 Terminal styling and presentation layer:

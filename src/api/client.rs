@@ -6,7 +6,10 @@
 
 use super::error::{parse_gitlab_error_body, ApiError};
 use super::pagination::PaginationInfo;
-use crate::models::{Job, MergeRequest, Pipeline, Project, User};
+use crate::models::{
+    Branch, CiVariable, Group, GroupMember, Job, MergeRequest, Pipeline, Project, Release, Snippet,
+    User,
+};
 use futures_util::StreamExt;
 use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, USER_AGENT};
 use reqwest::{Client, Method, RequestBuilder, Response, StatusCode};
@@ -679,6 +682,293 @@ impl GitLabClient {
         let encoded = Self::encode_path(project_path);
         let endpoint = format!("projects/{encoded}/pipelines/{id}/cancel");
         self.post(&endpoint, &serde_json::json!({})).await
+    }
+
+    // --- Release Endpoints ---
+
+    /// Lists releases for a project (`GET /projects/:id/releases`).
+    pub async fn list_releases(
+        &self,
+        project_path: &str,
+        max_items: Option<usize>,
+    ) -> Result<Vec<Release>, ApiError> {
+        let encoded = Self::encode_path(project_path);
+        let endpoint = format!("projects/{encoded}/releases");
+        self.get_paged(&endpoint, &[], max_items).await
+    }
+
+    /// Gets a single release by tag name (`GET /projects/:id/releases/:tag_name`).
+    pub async fn get_release(
+        &self,
+        project_path: &str,
+        tag_name: &str,
+    ) -> Result<Release, ApiError> {
+        let encoded = Self::encode_path(project_path);
+        let encoded_tag = Self::encode_path(tag_name);
+        let endpoint = format!("projects/{encoded}/releases/{encoded_tag}");
+        self.get(&endpoint, &[]).await
+    }
+
+    /// Creates a new release (`POST /projects/:id/releases`).
+    pub async fn create_release(
+        &self,
+        project_path: &str,
+        tag_name: &str,
+        name: Option<&str>,
+        description: Option<&str>,
+        ref_name: Option<&str>,
+    ) -> Result<Release, ApiError> {
+        let encoded = Self::encode_path(project_path);
+        let endpoint = format!("projects/{encoded}/releases");
+
+        #[derive(Serialize)]
+        struct CreateReleaseBody<'a> {
+            tag_name: &'a str,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            name: Option<&'a str>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            description: Option<&'a str>,
+            #[serde(rename = "ref", skip_serializing_if = "Option::is_none")]
+            ref_name: Option<&'a str>,
+        }
+
+        let body = CreateReleaseBody {
+            tag_name,
+            name,
+            description,
+            ref_name,
+        };
+
+        self.post(&endpoint, &body).await
+    }
+
+    /// Deletes a release (`DELETE /projects/:id/releases/:tag_name`).
+    pub async fn delete_release(&self, project_path: &str, tag_name: &str) -> Result<(), ApiError> {
+        let encoded = Self::encode_path(project_path);
+        let encoded_tag = Self::encode_path(tag_name);
+        let endpoint = format!("projects/{encoded}/releases/{encoded_tag}");
+        self.delete(&endpoint).await
+    }
+
+    // --- Branch Endpoints ---
+
+    /// Lists repository branches (`GET /projects/:id/repository/branches`).
+    pub async fn list_branches(
+        &self,
+        project_path: &str,
+        max_items: Option<usize>,
+    ) -> Result<Vec<Branch>, ApiError> {
+        let encoded = Self::encode_path(project_path);
+        let endpoint = format!("projects/{encoded}/repository/branches");
+        self.get_paged(&endpoint, &[], max_items).await
+    }
+
+    /// Gets a single repository branch (`GET /projects/:id/repository/branches/:branch`).
+    pub async fn get_branch(&self, project_path: &str, branch: &str) -> Result<Branch, ApiError> {
+        let encoded = Self::encode_path(project_path);
+        let encoded_branch = Self::encode_path(branch);
+        let endpoint = format!("projects/{encoded}/repository/branches/{encoded_branch}");
+        self.get(&endpoint, &[]).await
+    }
+
+    /// Creates a new branch from a ref (`POST /projects/:id/repository/branches`).
+    pub async fn create_branch(
+        &self,
+        project_path: &str,
+        branch: &str,
+        ref_name: &str,
+    ) -> Result<Branch, ApiError> {
+        let encoded = Self::encode_path(project_path);
+        let endpoint = format!("projects/{encoded}/repository/branches");
+
+        #[derive(Serialize)]
+        struct CreateBranchBody<'a> {
+            branch: &'a str,
+            #[serde(rename = "ref")]
+            ref_name: &'a str,
+        }
+
+        let body = CreateBranchBody { branch, ref_name };
+
+        self.post(&endpoint, &body).await
+    }
+
+    /// Deletes a branch (`DELETE /projects/:id/repository/branches/:branch`).
+    pub async fn delete_branch(&self, project_path: &str, branch: &str) -> Result<(), ApiError> {
+        let encoded = Self::encode_path(project_path);
+        let encoded_branch = Self::encode_path(branch);
+        let endpoint = format!("projects/{encoded}/repository/branches/{encoded_branch}");
+        self.delete(&endpoint).await
+    }
+
+    // --- Group Endpoints ---
+
+    /// Lists groups accessible to the user (`GET /groups`).
+    pub async fn list_groups(
+        &self,
+        search: Option<&str>,
+        max_items: Option<usize>,
+    ) -> Result<Vec<Group>, ApiError> {
+        let mut query = Vec::new();
+        if let Some(s) = search {
+            query.push(("search", s));
+        }
+        self.get_paged("groups", &query, max_items).await
+    }
+
+    /// Gets a single group by ID or path (`GET /groups/:id`).
+    pub async fn get_group(&self, id_or_path: &str) -> Result<Group, ApiError> {
+        let encoded = Self::encode_path(id_or_path);
+        let endpoint = format!("groups/{encoded}");
+        self.get(&endpoint, &[]).await
+    }
+
+    /// Lists members of a group (`GET /groups/:id/members`).
+    pub async fn list_group_members(
+        &self,
+        id_or_path: &str,
+        max_items: Option<usize>,
+    ) -> Result<Vec<GroupMember>, ApiError> {
+        let encoded = Self::encode_path(id_or_path);
+        let endpoint = format!("groups/{encoded}/members");
+        self.get_paged(&endpoint, &[], max_items).await
+    }
+
+    // --- CI/CD Variable Endpoints ---
+
+    /// Lists CI/CD variables configured for a project (`GET /projects/:id/variables`).
+    pub async fn list_variables(
+        &self,
+        project_path: &str,
+        max_items: Option<usize>,
+    ) -> Result<Vec<CiVariable>, ApiError> {
+        let encoded = Self::encode_path(project_path);
+        let endpoint = format!("projects/{encoded}/variables");
+        self.get_paged(&endpoint, &[], max_items).await
+    }
+
+    /// Gets a single variable by key (`GET /projects/:id/variables/:key`).
+    pub async fn get_variable(
+        &self,
+        project_path: &str,
+        key: &str,
+    ) -> Result<CiVariable, ApiError> {
+        let encoded = Self::encode_path(project_path);
+        let endpoint = format!("projects/{encoded}/variables/{key}");
+        self.get(&endpoint, &[]).await
+    }
+
+    /// Sets or updates a project CI/CD variable (`POST /projects/:id/variables` or `PUT`).
+    pub async fn set_variable(
+        &self,
+        project_path: &str,
+        key: &str,
+        value: &str,
+        masked: bool,
+        protected: bool,
+        environment_scope: Option<&str>,
+    ) -> Result<CiVariable, ApiError> {
+        let encoded = Self::encode_path(project_path);
+        let endpoint = format!("projects/{encoded}/variables");
+
+        #[derive(Serialize)]
+        struct SetVariableBody<'a> {
+            key: &'a str,
+            value: &'a str,
+            masked: bool,
+            protected: bool,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            environment_scope: Option<&'a str>,
+        }
+
+        let body = SetVariableBody {
+            key,
+            value,
+            masked,
+            protected,
+            environment_scope,
+        };
+
+        // Attempt POST first
+        match self
+            .post::<SetVariableBody, CiVariable>(&endpoint, &body)
+            .await
+        {
+            Ok(v) => Ok(v),
+            Err(ApiError::GitLab { status, .. }) if status == StatusCode::BAD_REQUEST => {
+                // If it already exists, update via PUT
+                let update_endpoint = format!("projects/{encoded}/variables/{key}");
+                self.put(&update_endpoint, &body).await
+            }
+            Err(e) => Err(e),
+        }
+    }
+
+    /// Deletes a project CI/CD variable (`DELETE /projects/:id/variables/:key`).
+    pub async fn delete_variable(&self, project_path: &str, key: &str) -> Result<(), ApiError> {
+        let encoded = Self::encode_path(project_path);
+        let endpoint = format!("projects/{encoded}/variables/{key}");
+        self.delete(&endpoint).await
+    }
+
+    // --- Snippet Endpoints ---
+
+    /// Lists snippets accessible to the user (`GET /snippets`).
+    pub async fn list_snippets(&self, max_items: Option<usize>) -> Result<Vec<Snippet>, ApiError> {
+        self.get_paged("snippets", &[], max_items).await
+    }
+
+    /// Gets a single snippet by numeric ID (`GET /snippets/:id`).
+    pub async fn get_snippet(&self, id: u64) -> Result<Snippet, ApiError> {
+        let endpoint = format!("snippets/{id}");
+        self.get(&endpoint, &[]).await
+    }
+
+    /// Gets the raw text content of a snippet (`GET /snippets/:id/raw`).
+    pub async fn get_snippet_raw(&self, id: u64) -> Result<String, ApiError> {
+        let endpoint = format!("snippets/{id}/raw");
+        let url = self.base_url.join(&endpoint)?;
+        let req = self.authenticate(self.http.get(url));
+        let resp = self.execute_with_retry(req).await?;
+        let resp = self.check_response(resp, &endpoint).await?;
+        let text = resp.text().await.map_err(ApiError::Http)?;
+        Ok(text)
+    }
+
+    /// Creates a new snippet (`POST /snippets`).
+    pub async fn create_snippet(
+        &self,
+        title: &str,
+        file_name: &str,
+        content: &str,
+        visibility: &str,
+        description: Option<&str>,
+    ) -> Result<Snippet, ApiError> {
+        #[derive(Serialize)]
+        struct CreateSnippetBody<'a> {
+            title: &'a str,
+            file_name: &'a str,
+            content: &'a str,
+            visibility: &'a str,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            description: Option<&'a str>,
+        }
+
+        let body = CreateSnippetBody {
+            title,
+            file_name,
+            content,
+            visibility,
+            description,
+        };
+
+        self.post("snippets", &body).await
+    }
+
+    /// Deletes a snippet (`DELETE /snippets/:id`).
+    pub async fn delete_snippet(&self, id: u64) -> Result<(), ApiError> {
+        let endpoint = format!("snippets/{id}");
+        self.delete(&endpoint).await
     }
 }
 

@@ -2,11 +2,16 @@
 
 pub mod api;
 pub mod auth;
+pub mod branch;
 pub mod ci;
 pub mod completion;
+pub mod group;
 pub mod issue;
 pub mod mr;
 pub mod project;
+pub mod release;
+pub mod snippet;
+pub mod variable;
 
 use clap::{Parser, Subcommand};
 
@@ -61,6 +66,16 @@ pub enum Commands {
     /// Manage CI/CD pipelines, jobs, and streaming traces.
     #[command(alias = "pipeline")]
     Ci(ci::CiArgs),
+    /// Manage project releases.
+    Release(release::ReleaseArgs),
+    /// Manage repository branches.
+    Branch(branch::BranchArgs),
+    /// View and manage GitLab groups and members.
+    Group(group::GroupArgs),
+    /// Manage project CI/CD variables.
+    Variable(variable::VariableArgs),
+    /// Manage code snippets.
+    Snippet(snippet::SnippetArgs),
     /// Execute direct authenticated REST API requests against GitLab.
     Api(api::ApiArgs),
     /// Generate shell completion scripts for Bash or Zsh.
