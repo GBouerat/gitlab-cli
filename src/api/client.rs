@@ -7,8 +7,9 @@
 use super::error::{parse_gitlab_error_body, ApiError};
 use super::pagination::PaginationInfo;
 use crate::models::{
-    Branch, CiVariable, Group, GroupMember, Job, MergeRequest, Pipeline, Project, Release, Snippet,
-    User,
+    Branch, CiVariable, Deployment, Environment, Epic, Group, GroupMember, Job, MergeRequest,
+    Milestone, MrApprovals, Note, Package, Pipeline, Project, RegistryRepository, RegistryTag,
+    Release, Snippet, Tag, User,
 };
 use futures_util::StreamExt;
 use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, USER_AGENT};
@@ -968,6 +969,509 @@ impl GitLabClient {
     /// Deletes a snippet (`DELETE /snippets/:id`).
     pub async fn delete_snippet(&self, id: u64) -> Result<(), ApiError> {
         let endpoint = format!("snippets/{id}");
+        self.delete(&endpoint).await
+    }
+
+    // --- MR Approvals & Notes Endpoints ---
+
+    /// Approves a Merge Request (`POST /projects/:id/merge_requests/:mr_iid/approve`).
+    pub async fn approve_mr(&self, project_path: &str, iid: u64) -> Result<MrApprovals, ApiError> {
+        let encoded = Self::encode_path(project_path);
+        let endpoint = format!("projects/{encoded}/merge_requests/{iid}/approve");
+        #[derive(Serialize)]
+        struct EmptyBody {}
+        self.post(&endpoint, &EmptyBody {}).await
+    }
+
+    /// Unapproves a Merge Request (`POST /projects/:id/merge_requests/:mr_iid/unapprove`).
+    pub async fn unapprove_mr(&self, project_path: &str, iid: u64) -> Result<(), ApiError> {
+        let encoded = Self::encode_path(project_path);
+        let endpoint = format!("projects/{encoded}/merge_requests/{iid}/unapprove");
+        #[derive(Serialize)]
+        struct EmptyBody {}
+        self.post::<EmptyBody, serde_json::Value>(&endpoint, &EmptyBody {})
+            .await?;
+        Ok(())
+    }
+
+    /// Gets approval state of a Merge Request (`GET /projects/:id/merge_requests/:mr_iid/approvals`).
+    pub async fn get_mr_approvals(
+        &self,
+        project_path: &str,
+        iid: u64,
+    ) -> Result<MrApprovals, ApiError> {
+        let encoded = Self::encode_path(project_path);
+        let endpoint = format!("projects/{encoded}/merge_requests/{iid}/approvals");
+        self.get(&endpoint, &[]).await
+    }
+
+    /// Lists notes (comments) for a Merge Request (`GET /projects/:id/merge_requests/:mr_iid/notes`).
+    pub async fn list_mr_notes(
+        &self,
+        project_path: &str,
+        iid: u64,
+        max_items: Option<usize>,
+    ) -> Result<Vec<Note>, ApiError> {
+        let encoded = Self::encode_path(project_path);
+        let endpoint = format!("projects/{encoded}/merge_requests/{iid}/notes");
+        self.get_paged(&endpoint, &[("sort", "asc")], max_items)
+            .await
+    }
+
+    /// Creates a note (comment) on a Merge Request (`POST /projects/:id/merge_requests/:mr_iid/notes`).
+    pub async fn create_mr_note(
+        &self,
+        project_path: &str,
+        iid: u64,
+        body: &str,
+    ) -> Result<Note, ApiError> {
+        let encoded = Self::encode_path(project_path);
+        let endpoint = format!("projects/{encoded}/merge_requests/{iid}/notes");
+        #[derive(Serialize)]
+        struct CreateNoteBody<'a> {
+            body: &'a str,
+        }
+        self.post(&endpoint, &CreateNoteBody { body }).await
+    }
+
+    // --- Issue Notes Endpoints ---
+
+    /// Lists notes (comments) for an Issue (`GET /projects/:id/issues/:issue_iid/notes`).
+    pub async fn list_issue_notes(
+        &self,
+        project_path: &str,
+        iid: u64,
+        max_items: Option<usize>,
+    ) -> Result<Vec<Note>, ApiError> {
+        let encoded = Self::encode_path(project_path);
+        let endpoint = format!("projects/{encoded}/issues/{iid}/notes");
+        self.get_paged(&endpoint, &[("sort", "asc")], max_items)
+            .await
+    }
+
+    /// Creates a note (comment) on an Issue (`POST /projects/:id/issues/:issue_iid/notes`).
+    pub async fn create_issue_note(
+        &self,
+        project_path: &str,
+        iid: u64,
+        body: &str,
+    ) -> Result<Note, ApiError> {
+        let encoded = Self::encode_path(project_path);
+        let endpoint = format!("projects/{encoded}/issues/{iid}/notes");
+        #[derive(Serialize)]
+        struct CreateNoteBody<'a> {
+            body: &'a str,
+        }
+        self.post(&endpoint, &CreateNoteBody { body }).await
+    }
+
+    // --- Tag Endpoints ---
+
+    /// Lists repository tags (`GET /projects/:id/repository/tags`).
+    pub async fn list_tags(
+        &self,
+        project_path: &str,
+        max_items: Option<usize>,
+    ) -> Result<Vec<Tag>, ApiError> {
+        let encoded = Self::encode_path(project_path);
+        let endpoint = format!("projects/{encoded}/repository/tags");
+        self.get_paged(&endpoint, &[], max_items).await
+    }
+
+    /// Gets a single repository tag (`GET /projects/:id/repository/tags/:tag_name`).
+    pub async fn get_tag(&self, project_path: &str, tag_name: &str) -> Result<Tag, ApiError> {
+        let encoded = Self::encode_path(project_path);
+        let encoded_tag = Self::encode_path(tag_name);
+        let endpoint = format!("projects/{encoded}/repository/tags/{encoded_tag}");
+        self.get(&endpoint, &[]).await
+    }
+
+    /// Creates a new repository tag (`POST /projects/:id/repository/tags`).
+    pub async fn create_tag(
+        &self,
+        project_path: &str,
+        tag_name: &str,
+        ref_name: &str,
+        message: Option<&str>,
+    ) -> Result<Tag, ApiError> {
+        let encoded = Self::encode_path(project_path);
+        let endpoint = format!("projects/{encoded}/repository/tags");
+        #[derive(Serialize)]
+        struct CreateTagBody<'a> {
+            tag_name: &'a str,
+            #[serde(rename = "ref")]
+            ref_name: &'a str,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            message: Option<&'a str>,
+        }
+        let body = CreateTagBody {
+            tag_name,
+            ref_name,
+            message,
+        };
+        self.post(&endpoint, &body).await
+    }
+
+    /// Deletes a repository tag (`DELETE /projects/:id/repository/tags/:tag_name`).
+    pub async fn delete_tag(&self, project_path: &str, tag_name: &str) -> Result<(), ApiError> {
+        let encoded = Self::encode_path(project_path);
+        let encoded_tag = Self::encode_path(tag_name);
+        let endpoint = format!("projects/{encoded}/repository/tags/{encoded_tag}");
+        self.delete(&endpoint).await
+    }
+
+    // --- Environment Endpoints ---
+
+    /// Lists project environments (`GET /projects/:id/environments`).
+    pub async fn list_environments(
+        &self,
+        project_path: &str,
+        max_items: Option<usize>,
+    ) -> Result<Vec<Environment>, ApiError> {
+        let encoded = Self::encode_path(project_path);
+        let endpoint = format!("projects/{encoded}/environments");
+        self.get_paged(&endpoint, &[], max_items).await
+    }
+
+    /// Gets an environment by ID (`GET /projects/:id/environments/:environment_id`).
+    pub async fn get_environment(
+        &self,
+        project_path: &str,
+        environment_id: u64,
+    ) -> Result<Environment, ApiError> {
+        let encoded = Self::encode_path(project_path);
+        let endpoint = format!("projects/{encoded}/environments/{environment_id}");
+        self.get(&endpoint, &[]).await
+    }
+
+    /// Creates a new environment (`POST /projects/:id/environments`).
+    pub async fn create_environment(
+        &self,
+        project_path: &str,
+        name: &str,
+        external_url: Option<&str>,
+    ) -> Result<Environment, ApiError> {
+        let encoded = Self::encode_path(project_path);
+        let endpoint = format!("projects/{encoded}/environments");
+        #[derive(Serialize)]
+        struct CreateEnvBody<'a> {
+            name: &'a str,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            external_url: Option<&'a str>,
+        }
+        let body = CreateEnvBody { name, external_url };
+        self.post(&endpoint, &body).await
+    }
+
+    /// Stops an environment (`POST /projects/:id/environments/:environment_id/stop`).
+    pub async fn stop_environment(
+        &self,
+        project_path: &str,
+        environment_id: u64,
+    ) -> Result<Environment, ApiError> {
+        let encoded = Self::encode_path(project_path);
+        let endpoint = format!("projects/{encoded}/environments/{environment_id}/stop");
+        #[derive(Serialize)]
+        struct EmptyBody {}
+        self.post(&endpoint, &EmptyBody {}).await
+    }
+
+    /// Deletes an environment (`DELETE /projects/:id/environments/:environment_id`).
+    pub async fn delete_environment(
+        &self,
+        project_path: &str,
+        environment_id: u64,
+    ) -> Result<(), ApiError> {
+        let encoded = Self::encode_path(project_path);
+        let endpoint = format!("projects/{encoded}/environments/{environment_id}");
+        self.delete(&endpoint).await
+    }
+
+    // --- Deployment Endpoints ---
+
+    /// Lists project deployments (`GET /projects/:id/deployments`).
+    pub async fn list_deployments(
+        &self,
+        project_path: &str,
+        status: Option<&str>,
+        max_items: Option<usize>,
+    ) -> Result<Vec<Deployment>, ApiError> {
+        let encoded = Self::encode_path(project_path);
+        let endpoint = format!("projects/{encoded}/deployments");
+        let mut query = Vec::new();
+        if let Some(s) = status {
+            query.push(("status", s));
+        }
+        self.get_paged(&endpoint, &query, max_items).await
+    }
+
+    /// Gets a deployment by ID (`GET /projects/:id/deployments/:deployment_id`).
+    pub async fn get_deployment(
+        &self,
+        project_path: &str,
+        deployment_id: u64,
+    ) -> Result<Deployment, ApiError> {
+        let encoded = Self::encode_path(project_path);
+        let endpoint = format!("projects/{encoded}/deployments/{deployment_id}");
+        self.get(&endpoint, &[]).await
+    }
+
+    // --- Milestone Endpoints ---
+
+    /// Lists project milestones (`GET /projects/:id/milestones`).
+    pub async fn list_project_milestones(
+        &self,
+        project_path: &str,
+        state: Option<&str>,
+        max_items: Option<usize>,
+    ) -> Result<Vec<Milestone>, ApiError> {
+        let encoded = Self::encode_path(project_path);
+        let endpoint = format!("projects/{encoded}/milestones");
+        let mut query = Vec::new();
+        if let Some(s) = state {
+            query.push(("state", s));
+        }
+        self.get_paged(&endpoint, &query, max_items).await
+    }
+
+    /// Lists group milestones (`GET /groups/:id/milestones`).
+    pub async fn list_group_milestones(
+        &self,
+        group_path: &str,
+        state: Option<&str>,
+        max_items: Option<usize>,
+    ) -> Result<Vec<Milestone>, ApiError> {
+        let encoded = Self::encode_path(group_path);
+        let endpoint = format!("groups/{encoded}/milestones");
+        let mut query = Vec::new();
+        if let Some(s) = state {
+            query.push(("state", s));
+        }
+        self.get_paged(&endpoint, &query, max_items).await
+    }
+
+    /// Gets a milestone by ID (`GET /projects/:id/milestones/:milestone_id`).
+    pub async fn get_milestone(
+        &self,
+        project_path: &str,
+        milestone_id: u64,
+    ) -> Result<Milestone, ApiError> {
+        let encoded = Self::encode_path(project_path);
+        let endpoint = format!("projects/{encoded}/milestones/{milestone_id}");
+        self.get(&endpoint, &[]).await
+    }
+
+    /// Creates a project milestone (`POST /projects/:id/milestones`).
+    pub async fn create_milestone(
+        &self,
+        project_path: &str,
+        title: &str,
+        description: Option<&str>,
+        due_date: Option<&str>,
+        start_date: Option<&str>,
+    ) -> Result<Milestone, ApiError> {
+        let encoded = Self::encode_path(project_path);
+        let endpoint = format!("projects/{encoded}/milestones");
+        #[derive(Serialize)]
+        struct CreateMilestoneBody<'a> {
+            title: &'a str,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            description: Option<&'a str>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            due_date: Option<&'a str>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            start_date: Option<&'a str>,
+        }
+        let body = CreateMilestoneBody {
+            title,
+            description,
+            due_date,
+            start_date,
+        };
+        self.post(&endpoint, &body).await
+    }
+
+    /// Closes a milestone (`PUT /projects/:id/milestones/:milestone_id`).
+    pub async fn close_milestone(
+        &self,
+        project_path: &str,
+        milestone_id: u64,
+    ) -> Result<Milestone, ApiError> {
+        let encoded = Self::encode_path(project_path);
+        let endpoint = format!("projects/{encoded}/milestones/{milestone_id}");
+        #[derive(Serialize)]
+        struct CloseMilestoneBody<'a> {
+            state_event: &'a str,
+        }
+        self.put(
+            &endpoint,
+            &CloseMilestoneBody {
+                state_event: "close",
+            },
+        )
+        .await
+    }
+
+    /// Deletes a milestone (`DELETE /projects/:id/milestones/:milestone_id`).
+    pub async fn delete_milestone(
+        &self,
+        project_path: &str,
+        milestone_id: u64,
+    ) -> Result<(), ApiError> {
+        let encoded = Self::encode_path(project_path);
+        let endpoint = format!("projects/{encoded}/milestones/{milestone_id}");
+        self.delete(&endpoint).await
+    }
+
+    // --- Epic Endpoints ---
+
+    /// Lists group epics (`GET /groups/:id/epics`).
+    pub async fn list_epics(
+        &self,
+        group_path: &str,
+        state: Option<&str>,
+        max_items: Option<usize>,
+    ) -> Result<Vec<Epic>, ApiError> {
+        let encoded = Self::encode_path(group_path);
+        let endpoint = format!("groups/{encoded}/epics");
+        let mut query = Vec::new();
+        if let Some(s) = state {
+            query.push(("state", s));
+        }
+        self.get_paged(&endpoint, &query, max_items).await
+    }
+
+    /// Gets an epic by internal IID (`GET /groups/:id/epics/:epic_iid`).
+    pub async fn get_epic(&self, group_path: &str, epic_iid: u64) -> Result<Epic, ApiError> {
+        let encoded = Self::encode_path(group_path);
+        let endpoint = format!("groups/{encoded}/epics/{epic_iid}");
+        self.get(&endpoint, &[]).await
+    }
+
+    /// Creates a group epic (`POST /groups/:id/epics`).
+    pub async fn create_epic(
+        &self,
+        group_path: &str,
+        title: &str,
+        description: Option<&str>,
+    ) -> Result<Epic, ApiError> {
+        let encoded = Self::encode_path(group_path);
+        let endpoint = format!("groups/{encoded}/epics");
+        #[derive(Serialize)]
+        struct CreateEpicBody<'a> {
+            title: &'a str,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            description: Option<&'a str>,
+        }
+        let body = CreateEpicBody { title, description };
+        self.post(&endpoint, &body).await
+    }
+
+    /// Closes an epic (`PUT /groups/:id/epics/:epic_iid`).
+    pub async fn close_epic(&self, group_path: &str, epic_iid: u64) -> Result<Epic, ApiError> {
+        let encoded = Self::encode_path(group_path);
+        let endpoint = format!("groups/{encoded}/epics/{epic_iid}");
+        #[derive(Serialize)]
+        struct CloseEpicBody<'a> {
+            state_event: &'a str,
+        }
+        self.put(
+            &endpoint,
+            &CloseEpicBody {
+                state_event: "close",
+            },
+        )
+        .await
+    }
+
+    // --- Package Endpoints ---
+
+    /// Lists project packages (`GET /projects/:id/packages`).
+    pub async fn list_packages(
+        &self,
+        project_path: &str,
+        package_type: Option<&str>,
+        max_items: Option<usize>,
+    ) -> Result<Vec<Package>, ApiError> {
+        let encoded = Self::encode_path(project_path);
+        let endpoint = format!("projects/{encoded}/packages");
+        let mut query = Vec::new();
+        if let Some(t) = package_type {
+            query.push(("package_type", t));
+        }
+        self.get_paged(&endpoint, &query, max_items).await
+    }
+
+    /// Gets a package by ID (`GET /projects/:id/packages/:package_id`).
+    pub async fn get_package(
+        &self,
+        project_path: &str,
+        package_id: u64,
+    ) -> Result<Package, ApiError> {
+        let encoded = Self::encode_path(project_path);
+        let endpoint = format!("projects/{encoded}/packages/{package_id}");
+        self.get(&endpoint, &[]).await
+    }
+
+    /// Deletes a package (`DELETE /projects/:id/packages/:package_id`).
+    pub async fn delete_package(
+        &self,
+        project_path: &str,
+        package_id: u64,
+    ) -> Result<(), ApiError> {
+        let encoded = Self::encode_path(project_path);
+        let endpoint = format!("projects/{encoded}/packages/{package_id}");
+        self.delete(&endpoint).await
+    }
+
+    // --- Container Registry Endpoints ---
+
+    /// Lists container registry repositories (`GET /projects/:id/registry/repositories`).
+    pub async fn list_registry_repositories(
+        &self,
+        project_path: &str,
+        max_items: Option<usize>,
+    ) -> Result<Vec<RegistryRepository>, ApiError> {
+        let encoded = Self::encode_path(project_path);
+        let endpoint = format!("projects/{encoded}/registry/repositories");
+        self.get_paged(&endpoint, &[("tags", "true")], max_items)
+            .await
+    }
+
+    /// Lists tags for a container registry repository (`GET /projects/:id/registry/repositories/:repository_id/tags`).
+    pub async fn list_registry_tags(
+        &self,
+        project_path: &str,
+        repository_id: u64,
+        max_items: Option<usize>,
+    ) -> Result<Vec<RegistryTag>, ApiError> {
+        let encoded = Self::encode_path(project_path);
+        let endpoint = format!("projects/{encoded}/registry/repositories/{repository_id}/tags");
+        self.get_paged(&endpoint, &[], max_items).await
+    }
+
+    /// Deletes a container registry tag (`DELETE /projects/:id/registry/repositories/:repository_id/tags/:tag_name`).
+    pub async fn delete_registry_tag(
+        &self,
+        project_path: &str,
+        repository_id: u64,
+        tag_name: &str,
+    ) -> Result<(), ApiError> {
+        let encoded = Self::encode_path(project_path);
+        let encoded_tag = Self::encode_path(tag_name);
+        let endpoint =
+            format!("projects/{encoded}/registry/repositories/{repository_id}/tags/{encoded_tag}");
+        self.delete(&endpoint).await
+    }
+
+    /// Deletes a container registry repository (`DELETE /projects/:id/registry/repositories/:repository_id`).
+    pub async fn delete_registry_repository(
+        &self,
+        project_path: &str,
+        repository_id: u64,
+    ) -> Result<(), ApiError> {
+        let encoded = Self::encode_path(project_path);
+        let endpoint = format!("projects/{encoded}/registry/repositories/{repository_id}");
         self.delete(&endpoint).await
     }
 }

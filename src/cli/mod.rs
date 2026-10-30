@@ -5,12 +5,19 @@ pub mod auth;
 pub mod branch;
 pub mod ci;
 pub mod completion;
+pub mod deployment;
+pub mod environment;
+pub mod epic;
 pub mod group;
 pub mod issue;
+pub mod milestone;
 pub mod mr;
+pub mod package;
 pub mod project;
+pub mod registry;
 pub mod release;
 pub mod snippet;
+pub mod tag;
 pub mod variable;
 
 use clap::{Parser, Subcommand};
@@ -70,6 +77,22 @@ pub enum Commands {
     Release(release::ReleaseArgs),
     /// Manage repository branches.
     Branch(branch::BranchArgs),
+    /// Manage repository tags.
+    Tag(tag::TagArgs),
+    /// Manage project environments.
+    #[command(alias = "environment")]
+    Env(environment::EnvironmentArgs),
+    /// View project deployments.
+    #[command(alias = "deployment")]
+    Deploy(deployment::DeploymentArgs),
+    /// Manage project and group milestones.
+    Milestone(milestone::MilestoneArgs),
+    /// Manage group epics.
+    Epic(epic::EpicArgs),
+    /// Manage project packages.
+    Package(package::PackageArgs),
+    /// Manage container registry images and repositories.
+    Registry(registry::RegistryArgs),
     /// View and manage GitLab groups and members.
     Group(group::GroupArgs),
     /// Manage project CI/CD variables.

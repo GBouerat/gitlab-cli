@@ -19,6 +19,13 @@ flowchart TD
         CmdCI["ci (src/commands/ci.rs)"]
         CmdRel["release (src/commands/release.rs)"]
         CmdBr["branch (src/commands/branch.rs)"]
+        CmdTag["tag (src/commands/tag.rs)"]
+        CmdEnv["env (src/commands/environment.rs)"]
+        CmdDeploy["deploy (src/commands/deployment.rs)"]
+        CmdMS["milestone (src/commands/milestone.rs)"]
+        CmdEpic["epic (src/commands/epic.rs)"]
+        CmdPkg["package (src/commands/package.rs)"]
+        CmdReg["registry (src/commands/registry.rs)"]
         CmdGrp["group (src/commands/group.rs)"]
         CmdVar["variable (src/commands/variable.rs)"]
         CmdSnip["snippet (src/commands/snippet.rs)"]
@@ -47,8 +54,8 @@ flowchart TD
 
     Parser --> GitCtx
     Parser --> ConfigMgr
-    Parser --> CmdAuth & CmdProj & CmdMR & CmdIssue & CmdCI & CmdRel & CmdBr & CmdGrp & CmdVar & CmdSnip & CmdApi & CmdComp
-    CmdProj & CmdMR & CmdIssue & CmdCI & CmdRel & CmdBr & CmdGrp & CmdVar & CmdSnip & CmdApi --> Client
+    Parser --> CmdAuth & CmdProj & CmdMR & CmdIssue & CmdCI & CmdRel & CmdBr & CmdTag & CmdEnv & CmdDeploy & CmdMS & CmdEpic & CmdPkg & CmdReg & CmdGrp & CmdVar & CmdSnip & CmdApi & CmdComp
+    CmdProj & CmdMR & CmdIssue & CmdCI & CmdRel & CmdBr & CmdTag & CmdEnv & CmdDeploy & CmdMS & CmdEpic & CmdPkg & CmdReg & CmdGrp & CmdVar & CmdSnip & CmdApi --> Client
     Client --> AuthHdr & Encoder & Paging & Retry
     Client --> UI
     Client --> GitLabCom & SelfManaged
@@ -67,11 +74,18 @@ Declares the CLI commands, options, and flags using `clap` derive macros:
 * **Subcommands**:
   * `auth`: Login, status, and logout commands.
   * `project` (alias: `repo`): View project metadata, clone URLs, and list user projects.
-  * `mr` (alias: `merge-request`): List, view, create, checkout, merge, close, and reopen merge requests.
-  * `issue`: List, view, create, close, and reopen issues.
+  * `mr` (alias: `merge-request`): List, view, create, checkout, merge, close, reopen, approve, unapprove, view approvals, and add/list comments/notes on merge requests.
+  * `issue`: List, view, create, close, reopen, and add/list comments/notes on issues.
   * `ci` (alias: `pipeline`): List pipelines, inspect jobs, trigger pipelines, and stream live job trace logs.
   * `release`: List, view, create, and delete project releases.
   * `branch`: List, view, create, and delete repository branches.
+  * `tag`: List, view, create, and delete Git tags.
+  * `env` (alias: `environment`): List, view, create, stop, and delete project environments.
+  * `deploy` (alias: `deployment`): List and view project deployments.
+  * `milestone`: List, view, create, close, and delete project and group milestones.
+  * `epic`: List, view, create, and close group epics.
+  * `package`: List, view, and delete project packages (npm, Maven, PyPI, generic, etc.).
+  * `registry`: List container repositories, list image tags, delete tags, and delete repositories.
   * `group`: List accessible groups, view details, and inspect group members with role permissions.
   * `variable`: List, inspect, set (with automated POST-or-PUT fallback), and delete CI/CD project variables.
   * `snippet`: List, view, create (with interactive or stdin content), and delete personal and project snippets.
@@ -108,10 +122,18 @@ Strongly-typed Rust structures for GitLab REST API v4 data:
 * `User`: Profiles and authors.
 * `Project`: Repositories, metadata, clone URLs, and statistics.
 * `MergeRequest`: Details, approval states, branches, draft flags, and conflict indicators.
+* `MrApprovals` & `Note`: Approval states, approvers list, discussion comments, and system notes.
 * `Issue`: Issue tracker items, state, authors, and labels.
 * `Pipeline` & `Job`: CI/CD pipelines, statuses, durations, and job stage breakdowns.
 * `Release`: Project releases, tag associations, release assets, and author information.
 * `Branch`: Git branches, protection status, default branch tags, and commit summaries.
+* `Tag`: Git tags, annotation messages, and commit associations.
+* `Environment`: Deployment targets, external URLs, slugs, and lifecycle states.
+* `Deployment`: Individual deployment events, refs, SHAs, and statuses.
+* `Milestone`: Milestones with due dates, start dates, and completion status.
+* `Epic`: Group epics with authors, labels, and state tracking.
+* `Package` & `PackageFile`: Package registry items and file assets across ecosystem formats.
+* `RegistryRepository` & `RegistryTag`: Container registry repositories, tags, digests, and sizes.
 * `Group` & `GroupMember`: Namespace groups, hierarchies, and member access levels.
 * `CiVariable`: CI/CD variables, types, masking, and environment scopes.
 * `Snippet`: Code snippets, visibility levels, file attachments, and raw content.

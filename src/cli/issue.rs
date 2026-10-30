@@ -23,6 +23,10 @@ pub enum IssueCommands {
     Close(IssueCloseArgs),
     /// Reopen a closed issue.
     Reopen(IssueReopenArgs),
+    /// Add a comment/note to an issue.
+    Note(IssueNoteArgs),
+    /// List comments/notes on an issue.
+    Notes(IssueNotesArgs),
 }
 
 /// Arguments for `gitlab issue list`.
@@ -80,4 +84,26 @@ pub struct IssueCloseArgs {
 pub struct IssueReopenArgs {
     /// Internal project-scoped issue IID to reopen.
     pub iid: u64,
+}
+
+/// Arguments for `gitlab issue note`.
+#[derive(Args, Debug)]
+pub struct IssueNoteArgs {
+    /// Internal project-scoped issue IID.
+    pub iid: u64,
+
+    /// Comment text body (Markdown). If omitted, an interactive editor/prompt will open.
+    #[arg(short = 'b', long)]
+    pub body: Option<String>,
+}
+
+/// Arguments for `gitlab issue notes`.
+#[derive(Args, Debug)]
+pub struct IssueNotesArgs {
+    /// Internal project-scoped issue IID.
+    pub iid: u64,
+
+    /// Maximum number of notes to display.
+    #[arg(short = 'n', long, default_value = "30")]
+    pub limit: usize,
 }

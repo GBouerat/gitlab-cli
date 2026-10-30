@@ -2,8 +2,8 @@
 
 use crate::api::GitLabClient;
 use crate::cli::issue::{
-    IssueArgs, IssueCloseArgs, IssueCommands, IssueCreateArgs, IssueListArgs, IssueReopenArgs,
-    IssueViewArgs,
+    IssueArgs, IssueCloseArgs, IssueCommands, IssueCreateArgs, IssueListArgs, IssueNoteArgs,
+    IssueNotesArgs, IssueReopenArgs, IssueViewArgs,
 };
 use crate::ui::table::{colored_cell, create_table, print_json_or_table, status_cell};
 use colored::Colorize;
@@ -34,6 +34,10 @@ pub async fn execute_issue(
         IssueCommands::Create(create_args) => handle_create(create_args, client, project).await,
         IssueCommands::Close(close_args) => handle_close(close_args, client, project).await,
         IssueCommands::Reopen(reopen_args) => handle_reopen(reopen_args, client, project).await,
+        IssueCommands::Note(note_args) => handle_note(note_args, client, project).await,
+        IssueCommands::Notes(notes_args) => {
+            handle_notes(notes_args, client, project, json_mode).await
+        }
     }
 }
 
@@ -198,4 +202,68 @@ async fn handle_reopen(
         issue.title.bold()
     );
     Ok(())
+}
+
+async fn handle_note(
+    args: IssueNoteArgs,
+    client: &GitLabClient,
+    project: &str,
+) -> anyhow::Result<()> {
+    let body = match args.body {
+        Some(b) => b,
+        None => Text::new("Comment body:").prompt()?,
+    };
+
+    let note = client.create_issue_note(project, args.iid, &body).await?;
+    println!(
+        "{} Added comment #{} to issue #{}",
+        "✓".green().bold(),
+        note.id,
+        args.iid
+    );
+    Ok(())
+}
+
+async fn handle_notes(
+    args: IssueNotesArgs,
+    client: &GitLabClient,
+    project: &str,
+    json_mode: bool,
+) -> anyhow::Result<()> {
+    let notes = client
+        .list_issue_notes(project, args.iid, Some(args.limit))
+        .await?;
+
+    let mut table = create_table(&["ID", "Author", "Type", "Created At", "Comment"]);
+    for n in &notes {
+        let author = n
+            .author
+            .as_ref()
+            .map(|u| format!("@{}", u.username))
+            .unwrap_or_else(|| "-".to_string());
+        let note_type = if n.system { "system" } else { "user" };
+        let snippet = if n.body.len() > 60 {
+            format!("{}...", &n.body[..57])
+        } else {
+            n.body.clone()
+        };
+
+        table.add_row(vec![
+            colored_cell(n.id.to_string(), Color::Cyan, false),
+            Cell::new(author),
+            colored_cell(
+                note_type,
+                if n.system {
+                    Color::DarkGrey
+                } else {
+                    Color::Green
+                },
+                false,
+            ),
+            Cell::new(n.created_at.as_deref().unwrap_or("-")),
+            Cell::new(snippet),
+        ]);
+    }
+
+    print_json_or_table(&notes, &table, json_mode)
 }

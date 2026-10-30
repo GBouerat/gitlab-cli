@@ -12,11 +12,14 @@ A fast, modular, and ergonomic command-line interface for GitLab written in Rust
 - **Blazing Fast & Self-Contained**: Compiled to a native standalone binary with `rustls` (zero OpenSSL system library dependencies).
 - **Context-Aware**: Automatically detects the active GitLab repository, host, and branch from your local `git remote origin`.
 - **Multi-Instance Support**: Seamlessly manage credentials for `gitlab.com` alongside self-hosted/enterprise instances.
-- **Merge Requests (`gitlab mr`)**: List, view, create, checkout, merge, close, and reopen merge requests directly from the terminal.
+- **Merge Requests (`gitlab mr`)**: List, view, create, checkout, merge, close, reopen, approve, and comment on merge requests.
 - **CI/CD Pipelines & Real-time Logs (`gitlab ci`)**: Inspect pipeline statuses, view job stages, trigger runs, and stream live job logs (`gitlab ci trace`).
-- **Issue Tracking (`gitlab issue`)**: View and manage issues with label and state filtering.
+- **Issue Tracking (`gitlab issue`)**: View and manage issues with label and state filtering, and add discussion comments.
 - **Project Releases (`gitlab release`)**: List, view, create, and delete releases with release notes and tag associations.
-- **Repository Branches (`gitlab branch`)**: Inspect branches, track default and protected states, create new branches, and delete branches.
+- **Repository Branches & Tags (`gitlab branch`, `gitlab tag`)**: Manage branches and Git tags, protection rules, and commit refs.
+- **Environments & Deployments (`gitlab env`, `gitlab deploy`)**: Manage deployment environments and inspect deployment statuses.
+- **Milestones & Epics (`gitlab milestone`, `gitlab epic`)**: Track delivery roadmap progress across projects and group epics.
+- **Packages & Container Registry (`gitlab package`, `gitlab registry`)**: Inspect packages and container images/tags.
 - **Groups & Members (`gitlab group`)**: Browse namespaces, inspect group hierarchies, and view member permissions.
 - **CI/CD Variables (`gitlab variable`)**: Manage project environment variables, with support for masked, protected, and scoped variables.
 - **Code Snippets (`gitlab snippet`)**: Create, inspect, view raw contents, and delete personal and project snippets.
@@ -99,6 +102,18 @@ gitlab mr create --title "Add new feature" --draft
 # Check out a merge request branch locally
 gitlab mr checkout 42
 
+# Approve a merge request
+gitlab mr approve 42
+
+# View approval status and reviewers
+gitlab mr approvals 42
+
+# Add a comment to a merge request
+gitlab mr note 42 --body "LGTM!"
+
+# List comments on a merge request
+gitlab mr notes 42
+
 # Merge an open merge request
 gitlab mr merge 42 --squash --remove-source-branch
 ```
@@ -133,6 +148,12 @@ gitlab issue list --labels "bug,critical"
 
 # Create a new issue
 gitlab issue create --title "Parser panic on invalid token"
+
+# Add a comment to an issue
+gitlab issue note 15 --body "Looking into this."
+
+# List comments on an issue
+gitlab issue notes 15
 ```
 
 ### 6. Releases
@@ -151,7 +172,7 @@ gitlab release create v1.1.0 --name "v1.1.0 Feature Release" --ref main --descri
 gitlab release delete v1.1.0
 ```
 
-### 7. Branches
+### 7. Branches & Tags
 
 ```bash
 # List repository branches
@@ -165,9 +186,93 @@ gitlab branch create feature/awesome --ref main
 
 # Delete a branch
 gitlab branch delete feature/awesome
+
+# List repository tags
+gitlab tag list
+
+# View tag details
+gitlab tag view v1.0.0
+
+# Create a new tag
+gitlab tag create v1.0.0 --ref main --message "Release v1.0"
+
+# Delete a tag
+gitlab tag delete v1.0.0
 ```
 
-### 8. Groups & Members
+### 8. Environments & Deployments
+
+```bash
+# List project environments
+gitlab env list
+
+# View environment details
+gitlab env view 1
+
+# Create an environment
+gitlab env create staging --url https://staging.example.com
+
+# Stop an environment
+gitlab env stop 1
+
+# List deployments
+gitlab deploy list
+
+# View deployment details
+gitlab deploy view 100
+```
+
+### 9. Milestones & Epics
+
+```bash
+# List project milestones
+gitlab milestone list
+
+# List group milestones
+gitlab milestone list --group my-group
+
+# View milestone details
+gitlab milestone view 10
+
+# Create a milestone
+gitlab milestone create "v1.0 Release" --due-date "2026-12-31"
+
+# Close a milestone
+gitlab milestone close 10
+
+# List group epics
+gitlab epic list --group my-group
+
+# View epic details
+gitlab epic view 1 --group my-group
+
+# Create a group epic
+gitlab epic create "Core Modernization" --group my-group
+```
+
+### 10. Packages & Container Registry
+
+```bash
+# List project packages
+gitlab package list
+
+# View package details
+gitlab package view 42
+
+# Delete a package
+gitlab package delete 42
+
+# List container repositories
+gitlab registry list
+
+# List tags for a container repository
+gitlab registry tags 2
+
+# Delete a container image tag
+gitlab registry delete-tag 2 latest
+```
+
+### 11. Groups & Members
 
 ```bash
 # List accessible groups
@@ -183,7 +288,7 @@ gitlab group view core-platform
 gitlab group members core-platform
 ```
 
-### 9. CI/CD Variables
+### 12. CI/CD Variables
 
 ```bash
 # List project variables
@@ -199,7 +304,7 @@ gitlab variable set DATABASE_URL --value "postgres://localhost/db" --masked --pr
 gitlab variable delete DATABASE_URL
 ```
 
-### 10. Snippets
+### 13. Snippets
 
 ```bash
 # List snippets
@@ -218,7 +323,7 @@ gitlab snippet create --title "Quick script" --file script.sh --content "echo he
 gitlab snippet delete 42
 ```
 
-### 11. Raw API Querying
+### 14. Raw API Querying
 
 ```bash
 # Fetch current user details
@@ -228,7 +333,7 @@ gitlab api user
 gitlab api projects/:id/pipelines
 ```
 
-### 12. Shell Completions
+### 15. Shell Completions
 
 Generate completions for your shell:
 

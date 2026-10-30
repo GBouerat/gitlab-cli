@@ -70,13 +70,51 @@ fn test_subcommand_aliases() {
     let mut cmd_ci = Command::cargo_bin("gitlab").unwrap();
     cmd_ci.args(["pipeline", "--help"]);
     cmd_ci.assert().success();
+
+    // environment alias for env
+    let mut cmd_env = Command::cargo_bin("gitlab").unwrap();
+    cmd_env.args(["environment", "--help"]);
+    cmd_env.assert().success();
+
+    // deployment alias for deploy
+    let mut cmd_deploy = Command::cargo_bin("gitlab").unwrap();
+    cmd_deploy.args(["deployment", "--help"]);
+    cmd_deploy.assert().success();
 }
 
 #[test]
 fn test_new_subcommands_help() {
-    for subcommand in ["release", "branch", "group", "variable", "snippet"] {
+    for subcommand in [
+        "release",
+        "branch",
+        "group",
+        "variable",
+        "snippet",
+        "tag",
+        "env",
+        "deploy",
+        "milestone",
+        "epic",
+        "package",
+        "registry",
+    ] {
         let mut cmd = Command::cargo_bin("gitlab").unwrap();
         cmd.args([subcommand, "--help"]);
+        cmd.assert().success();
+    }
+}
+
+#[test]
+fn test_mr_and_issue_extended_subcommands_help() {
+    for sub in ["approve", "unapprove", "approvals", "note", "notes"] {
+        let mut cmd = Command::cargo_bin("gitlab").unwrap();
+        cmd.args(["mr", sub, "--help"]);
+        cmd.assert().success();
+    }
+
+    for sub in ["note", "notes"] {
+        let mut cmd = Command::cargo_bin("gitlab").unwrap();
+        cmd.args(["issue", sub, "--help"]);
         cmd.assert().success();
     }
 }

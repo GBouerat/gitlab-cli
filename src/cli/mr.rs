@@ -27,6 +27,16 @@ pub enum MrCommands {
     Close(MrCloseArgs),
     /// Reopen a closed merge request.
     Reopen(MrReopenArgs),
+    /// Approve an open merge request.
+    Approve(MrApproveArgs),
+    /// Revoke approval for a merge request.
+    Unapprove(MrApproveArgs),
+    /// View approval state and reviewers for a merge request.
+    Approvals(MrApprovalsArgs),
+    /// Add a comment/note to a merge request.
+    Note(MrNoteArgs),
+    /// List comments/notes on a merge request.
+    Notes(MrNotesArgs),
 }
 
 /// Arguments for `gitlab mr list`.
@@ -118,4 +128,40 @@ pub struct MrCloseArgs {
 pub struct MrReopenArgs {
     /// Internal project-scoped merge request IID to reopen.
     pub iid: u64,
+}
+
+/// Arguments for `gitlab mr approve` and `gitlab mr unapprove`.
+#[derive(Args, Debug)]
+pub struct MrApproveArgs {
+    /// Internal project-scoped merge request IID.
+    pub iid: u64,
+}
+
+/// Arguments for `gitlab mr approvals`.
+#[derive(Args, Debug)]
+pub struct MrApprovalsArgs {
+    /// Internal project-scoped merge request IID.
+    pub iid: u64,
+}
+
+/// Arguments for `gitlab mr note`.
+#[derive(Args, Debug)]
+pub struct MrNoteArgs {
+    /// Internal project-scoped merge request IID.
+    pub iid: u64,
+
+    /// Comment text body (Markdown). If omitted, an interactive editor/prompt will open.
+    #[arg(short = 'b', long)]
+    pub body: Option<String>,
+}
+
+/// Arguments for `gitlab mr notes`.
+#[derive(Args, Debug)]
+pub struct MrNotesArgs {
+    /// Internal project-scoped merge request IID.
+    pub iid: u64,
+
+    /// Maximum number of notes to display.
+    #[arg(short = 'l', long, default_value = "30")]
+    pub limit: usize,
 }

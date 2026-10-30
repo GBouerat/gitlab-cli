@@ -5,12 +5,19 @@ pub mod auth;
 pub mod branch;
 pub mod ci;
 pub mod completion;
+pub mod deployment;
+pub mod environment;
+pub mod epic;
 pub mod group;
 pub mod issue;
+pub mod milestone;
 pub mod mr;
+pub mod package;
 pub mod project;
+pub mod registry;
 pub mod release;
 pub mod snippet;
+pub mod tag;
 pub mod variable;
 
 use crate::api::GitLabClient;
@@ -95,6 +102,50 @@ pub async fn run_command(cli: Cli, mut config: Config) -> anyhow::Result<()> {
                         )
                     })?;
                     branch::execute_branch(args, &client, proj, cli.json).await
+                }
+                Commands::Tag(args) => {
+                    let proj = default_project.ok_or_else(|| {
+                        anyhow::anyhow!(
+                            "No GitLab project specified. Run inside a GitLab repository or provide `--repo <owner/repo>`."
+                        )
+                    })?;
+                    tag::execute_tag(args, &client, proj, cli.json).await
+                }
+                Commands::Env(args) => {
+                    let proj = default_project.ok_or_else(|| {
+                        anyhow::anyhow!(
+                            "No GitLab project specified. Run inside a GitLab repository or provide `--repo <owner/repo>`."
+                        )
+                    })?;
+                    environment::execute_environment(args, &client, proj, cli.json).await
+                }
+                Commands::Deploy(args) => {
+                    let proj = default_project.ok_or_else(|| {
+                        anyhow::anyhow!(
+                            "No GitLab project specified. Run inside a GitLab repository or provide `--repo <owner/repo>`."
+                        )
+                    })?;
+                    deployment::execute_deployment(args, &client, proj, cli.json).await
+                }
+                Commands::Milestone(args) => {
+                    milestone::execute_milestone(args, &client, default_project, cli.json).await
+                }
+                Commands::Epic(args) => epic::execute_epic(args, &client, cli.json).await,
+                Commands::Package(args) => {
+                    let proj = default_project.ok_or_else(|| {
+                        anyhow::anyhow!(
+                            "No GitLab project specified. Run inside a GitLab repository or provide `--repo <owner/repo>`."
+                        )
+                    })?;
+                    package::execute_package(args, &client, proj, cli.json).await
+                }
+                Commands::Registry(args) => {
+                    let proj = default_project.ok_or_else(|| {
+                        anyhow::anyhow!(
+                            "No GitLab project specified. Run inside a GitLab repository or provide `--repo <owner/repo>`."
+                        )
+                    })?;
+                    registry::execute_registry(args, &client, proj, cli.json).await
                 }
                 Commands::Variable(args) => {
                     let proj = default_project.ok_or_else(|| {
