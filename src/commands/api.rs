@@ -34,6 +34,19 @@ pub async fn execute_api(
     let mut query_params = Vec::new();
     let mut body_map = serde_json::Map::new();
 
+    // Load initial JSON payload from --input if specified
+    let mut body_opt: Option<serde_json::Value> = if let Some(input_src) = &args.input {
+        let raw_json = if input_src == "-" {
+            std::io::read_to_string(std::io::stdin())?
+        } else {
+            std::fs::read_to_string(input_src)?
+        };
+        let parsed: serde_json::Value = serde_json::from_str(&raw_json)?;
+        Some(parsed)
+    } else {
+        None
+    };
+
     for field in &args.fields {
         if let Some((k, v)) = field.split_once('=') {
             let key = k.trim().to_string();
@@ -55,16 +68,22 @@ pub async fn execute_api(
         }
     }
 
+    // Merge field key/value pairs into body if applicable
+    if !body_map.is_empty() {
+        match body_opt.as_mut() {
+            Some(serde_json::Value::Object(existing)) => {
+                existing.extend(body_map);
+            }
+            _ => {
+                body_opt = Some(serde_json::Value::Object(body_map));
+            }
+        }
+    }
+
     let query_refs: Vec<(&str, &str)> = query_params
         .iter()
         .map(|(k, v)| (k.as_str(), v.as_str()))
         .collect();
-
-    let body_opt = if body_map.is_empty() {
-        None
-    } else {
-        Some(serde_json::Value::Object(body_map))
-    };
 
     let resp = client
         .raw_request(method, &endpoint, &query_refs, body_opt)

@@ -200,6 +200,9 @@ impl GitLabClient {
         let mut all_items = Vec::new();
         let mut following_link = false;
         let mut page = 1;
+        let is_keyset = query
+            .iter()
+            .any(|(k, v)| *k == "pagination" && *v == "keyset");
 
         loop {
             let mut req = self.authenticate(self.http.get(current_url.clone()));
@@ -211,7 +214,9 @@ impl GitLabClient {
                 if !query.iter().any(|(k, _)| *k == "per_page") {
                     req = req.query(&[("per_page", "50")]);
                 }
-                req = req.query(&[("page", &page.to_string())]);
+                if !is_keyset {
+                    req = req.query(&[("page", &page.to_string())]);
+                }
             }
 
             let resp = self.execute_with_retry(req).await?;

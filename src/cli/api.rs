@@ -15,4 +15,8 @@ pub struct ApiArgs {
     /// Request fields as `key=value` pairs added to body or query parameters.
     #[arg(short = 'F', long = "field")]
     pub fields: Vec<String>,
+
+    /// Read JSON request body from a file, or pass '-' to read from standard input.
+    #[arg(short = 'i', long = "input")]
+    pub input: Option<String>,
 }

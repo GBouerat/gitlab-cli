@@ -64,6 +64,34 @@ async fn test_list_projects_pagination() {
 }
 
 #[tokio::test]
+async fn test_keyset_pagination_suppresses_page_param() {
+    let mock_server = MockServer::start().await;
+
+    let items = serde_json::json!([{
+        "id": 1,
+        "name": "Project One",
+        "path": "p1",
+        "path_with_namespace": "group/p1"
+    }]);
+
+    Mock::given(method("GET"))
+        .and(path("/api/v4/projects"))
+        .and(query_param("pagination", "keyset"))
+        .and(wiremock::matchers::query_param_is_missing("page"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(&items))
+        .mount(&mock_server)
+        .await;
+
+    let client = GitLabClient::new(mock_server.uri(), "token").unwrap();
+    let res: Vec<gitlab_cli::models::Project> = client
+        .get_paged("projects", &[("pagination", "keyset")], Some(1))
+        .await
+        .unwrap();
+
+    assert_eq!(res.len(), 1);
+}
+
+#[tokio::test]
 async fn test_list_mrs_with_query_params() {
     let mock_server = MockServer::start().await;
 

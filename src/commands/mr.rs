@@ -217,8 +217,9 @@ async fn handle_checkout(
         mr.iid
     );
 
+    let refspec = format!("{branch}:refs/remotes/origin/{branch}");
     let fetch_status = Command::new("git")
-        .args(["fetch", "origin", branch])
+        .args(["fetch", "origin", &refspec])
         .status()?;
 
     if !fetch_status.success() {
@@ -228,7 +229,12 @@ async fn handle_checkout(
     let checkout_status = Command::new("git").args(["checkout", branch]).status()?;
 
     if !checkout_status.success() {
-        anyhow::bail!("Failed to switch to branch '{branch}'");
+        let checkout_track = Command::new("git")
+            .args(["checkout", "-b", branch, &format!("origin/{branch}")])
+            .status()?;
+        if !checkout_track.success() {
+            anyhow::bail!("Failed to switch to branch '{branch}'");
+        }
     }
 
     println!(

@@ -117,6 +117,15 @@ impl Config {
         }
         let serialized = serde_json::to_string_pretty(self)?;
         fs::write(path, serialized)?;
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut perms = fs::metadata(path)?.permissions();
+            perms.set_mode(0o600);
+            fs::set_permissions(path, perms)?;
+        }
+
         Ok(())
     }
 
@@ -261,6 +270,20 @@ mod tests {
         );
         assert_eq!(loaded.hosts.get("gitlab.com").unwrap().token, "token-456");
         assert_eq!(loaded.hosts.get("gitlab.com").unwrap().user, None);
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn test_config_file_permissions_unix() {
+        use std::os::unix::fs::PermissionsExt;
+        let temp_file = NamedTempFile::new().unwrap();
+        let path = temp_file.path();
+
+        let config = Config::default();
+        config.save_to_path(path).unwrap();
+
+        let mode = fs::metadata(path).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o600);
     }
 
     #[test]
