@@ -130,3 +130,89 @@ fn test_project_scoped_command_fails_without_repo() {
         .failure()
         .stderr(predicate::str::contains("No GitLab project specified"));
 }
+
+#[test]
+fn test_mr_review_subcommands_help() {
+    for sub in [
+        "diff",
+        "discussions",
+        "comment",
+        "reply",
+        "resolve",
+        "note-edit",
+        "update",
+        "relink",
+        "find",
+    ] {
+        let mut cmd = Command::cargo_bin("gitlab").unwrap();
+        cmd.args(["mr", sub, "--help"]);
+        cmd.assert().success();
+    }
+}
+
+#[test]
+fn test_markdown_and_file_commands_help() {
+    let mut cmd_md = Command::cargo_bin("gitlab").unwrap();
+    cmd_md.args(["markdown", "render", "--help"]);
+    cmd_md.assert().success();
+
+    let mut cmd_file = Command::cargo_bin("gitlab").unwrap();
+    cmd_file.args(["file", "--help"]);
+    cmd_file.assert().success();
+}
+
+#[test]
+fn test_ci_list_and_trace_help() {
+    let mut cmd_list = Command::cargo_bin("gitlab").unwrap();
+    cmd_list.args(["ci", "list", "--help"]);
+    cmd_list
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("--sha"))
+        .stdout(predicate::str::contains("--ref"));
+
+    let mut cmd_trace = Command::cargo_bin("gitlab").unwrap();
+    cmd_trace.args(["ci", "trace", "--help"]);
+    cmd_trace
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("--tail"))
+        .stdout(predicate::str::contains("--no-color"));
+}
+
+#[test]
+fn test_mr_update_alias_b_and_issue_file_flags() {
+    let mut cmd_update = Command::cargo_bin("gitlab").unwrap();
+    cmd_update.args(["mr", "update", "--help"]);
+    cmd_update
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("-b"))
+        .stdout(predicate::str::contains("-f, --file"));
+
+    let mut cmd_issue_create = Command::cargo_bin("gitlab").unwrap();
+    cmd_issue_create.args(["issue", "create", "--help"]);
+    cmd_issue_create
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("-f, --file"));
+
+    let mut cmd_issue_note = Command::cargo_bin("gitlab").unwrap();
+    cmd_issue_note.args(["issue", "note", "--help"]);
+    cmd_issue_note
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("-f, --file"));
+}
+
+#[test]
+fn test_mr_comment_line_without_path_fails() {
+    let mut cmd = Command::cargo_bin("gitlab").unwrap();
+    cmd.args(["mr", "comment", "12", "-b", "Nice code", "--line", "42"])
+        .env("GITLAB_TOKEN", "mock-token")
+        .arg("--repo")
+        .arg("owner/repo");
+    cmd.assert().failure().stderr(predicate::str::contains(
+        "--path is required when specifying --line or --old-line",
+    ));
+}

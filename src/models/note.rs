@@ -28,6 +28,44 @@ pub struct Note {
     /// Whether this note has been resolved.
     #[serde(default)]
     pub resolved: bool,
+    /// Diff position details if this note is an inline code discussion.
+    #[serde(default)]
+    pub position: Option<DiscussionPosition>,
+    /// Type of note (e.g. `DiffNote` or `DiscussionNote`).
+    #[serde(rename = "type", default)]
+    pub note_type: Option<String>,
+    /// Web URL to view the note in the GitLab UI.
+    #[serde(default)]
+    pub web_url: Option<String>,
+}
+
+/// Position of a diff note within a merge request source file.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub struct DiscussionPosition {
+    /// Base commit SHA.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub base_sha: Option<String>,
+    /// Start commit SHA.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub start_sha: Option<String>,
+    /// Head commit SHA.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub head_sha: Option<String>,
+    /// Old file path before change.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub old_path: Option<String>,
+    /// New file path after change.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub new_path: Option<String>,
+    /// Position type (typically "text").
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub position_type: Option<String>,
+    /// Line number in old file version.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub old_line: Option<u64>,
+    /// Line number in new file version.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub new_line: Option<u64>,
 }
 
 /// Representation of the approval state for a Merge Request.

@@ -8,8 +8,10 @@ pub mod completion;
 pub mod deployment;
 pub mod environment;
 pub mod epic;
+pub mod file;
 pub mod group;
 pub mod issue;
+pub mod markdown;
 pub mod milestone;
 pub mod mr;
 pub mod package;
@@ -99,6 +101,10 @@ pub enum Commands {
     Variable(variable::VariableArgs),
     /// Manage code snippets.
     Snippet(snippet::SnippetArgs),
+    /// Render GitLab Flavored Markdown and report task list checkboxes.
+    Markdown(markdown::MarkdownArgs),
+    /// Print raw repository file from its web URL.
+    File(file::FileArgs),
     /// Execute direct authenticated REST API requests against GitLab.
     Api(api::ApiArgs),
     /// Generate shell completion scripts for Bash or Zsh.

@@ -7,9 +7,10 @@
 use super::error::{parse_gitlab_error_body, ApiError};
 use super::pagination::PaginationInfo;
 use crate::models::{
-    Branch, CiVariable, Deployment, Environment, Epic, Group, GroupMember, Job, MergeRequest,
-    Milestone, MrApprovals, Note, Package, Pipeline, Project, RegistryRepository, RegistryTag,
-    Release, Snippet, Tag, User,
+    Branch, CiVariable, Deployment, Discussion, DiscussionPosition, Environment, Epic, Group,
+    GroupMember, Job, MarkdownRenderResult, MergeRequest, MergeRequestDiff, Milestone, MrApprovals,
+    MrCommit, Note, Package, Pipeline, Project, RegistryRepository, RegistryTag, Release, Snippet,
+    Tag, User,
 };
 use futures_util::StreamExt;
 use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, USER_AGENT};
@@ -54,6 +55,37 @@ pub struct CreateMrParams<'a> {
     pub draft: bool,
     /// Whether to configure commits to squash on merge.
     pub squash: bool,
+    /// Optional reviewer user IDs.
+    pub reviewer_ids: Option<Vec<u64>>,
+    /// Optional assignee user IDs.
+    pub assignee_ids: Option<Vec<u64>>,
+    /// Optional comma-separated labels.
+    pub labels: Option<String>,
+    /// Whether to delete the source branch upon merge.
+    pub remove_source_branch: bool,
+}
+
+/// Parameters for updating an existing Merge Request via [`GitLabClient::update_mr`].
+#[derive(Debug, Clone, Default)]
+pub struct UpdateMrParams<'a> {
+    /// Target project ID or namespaced path.
+    pub project_path: &'a str,
+    /// Internal project-scoped merge request IID.
+    pub iid: u64,
+    /// Optional updated title.
+    pub title: Option<String>,
+    /// Optional updated description.
+    pub description: Option<String>,
+    /// Optional labels to add (comma-separated).
+    pub add_labels: Option<String>,
+    /// Optional labels to remove (comma-separated).
+    pub remove_labels: Option<String>,
+    /// Optional reviewer user IDs.
+    pub reviewer_ids: Option<Vec<u64>>,
+    /// Optional assignee user IDs.
+    pub assignee_ids: Option<Vec<u64>>,
+    /// Optional state event (`close`, `reopen`).
+    pub state_event: Option<&'a str>,
 }
 
 impl GitLabClient {
@@ -282,6 +314,27 @@ impl GitLabClient {
         Ok(all_items)
     }
 
+    /// Performs a `GET` request and returns the raw response body as a string.
+    pub async fn get_text(
+        &self,
+        endpoint: &str,
+        query: &[(&str, &str)],
+    ) -> Result<String, ApiError> {
+        let clean_endpoint = endpoint.trim_start_matches('/');
+        let mut url = self.base_url.join(clean_endpoint)?;
+        if !query.is_empty() {
+            url.query_pairs_mut().extend_pairs(query);
+        }
+        debug!("GET (text) {}", url);
+
+        let req = self.authenticate(self.http.get(url));
+        let resp = self.execute_with_retry(req).await?;
+        let resp = self.check_response(resp, endpoint).await?;
+
+        let text = resp.text().await.map_err(ApiError::Http)?;
+        Ok(text)
+    }
+
     /// Performs a `POST` request with a JSON body and deserializes the response.
     pub async fn post<B: Serialize, T: DeserializeOwned>(
         &self,
@@ -415,6 +468,7 @@ impl GitLabClient {
         project_path: &str,
         state: Option<&str>,
         target_branch: Option<&str>,
+        source_branch: Option<&str>,
         max_items: Option<usize>,
     ) -> Result<Vec<MergeRequest>, ApiError> {
         let encoded = Self::encode_path(project_path);
@@ -425,6 +479,9 @@ impl GitLabClient {
         }
         if let Some(tb) = target_branch {
             query.push(("target_branch", tb));
+        }
+        if let Some(sb) = source_branch {
+            query.push(("source_branch", sb));
         }
 
         self.get_paged(&endpoint, &query, max_items).await
@@ -456,6 +513,14 @@ impl GitLabClient {
             #[serde(skip_serializing_if = "Option::is_none")]
             description: Option<&'a str>,
             squash: bool,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            reviewer_ids: Option<&'a [u64]>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            assignee_ids: Option<&'a [u64]>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            labels: Option<&'a str>,
+            #[serde(skip_serializing_if = "std::ops::Not::not")]
+            remove_source_branch: bool,
         }
 
         let body = CreateMrBody {
@@ -464,9 +529,202 @@ impl GitLabClient {
             title: effective_title,
             description: params.description,
             squash: params.squash,
+            reviewer_ids: params.reviewer_ids.as_deref(),
+            assignee_ids: params.assignee_ids.as_deref(),
+            labels: params.labels.as_deref(),
+            remove_source_branch: params.remove_source_branch,
         };
 
         self.post(&endpoint, &body).await
+    }
+
+    /// Updates an existing Merge Request (`PUT /projects/:id/merge_requests/:mr_iid`).
+    pub async fn update_mr(&self, params: &UpdateMrParams<'_>) -> Result<MergeRequest, ApiError> {
+        let encoded = Self::encode_path(params.project_path);
+        let endpoint = format!("projects/{encoded}/merge_requests/{}", params.iid);
+
+        #[derive(Serialize)]
+        struct UpdateMrBody<'a> {
+            #[serde(skip_serializing_if = "Option::is_none")]
+            title: Option<&'a str>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            description: Option<&'a str>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            add_labels: Option<&'a str>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            remove_labels: Option<&'a str>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            reviewer_ids: Option<&'a [u64]>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            assignee_ids: Option<&'a [u64]>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            state_event: Option<&'a str>,
+        }
+
+        let body = UpdateMrBody {
+            title: params.title.as_deref(),
+            description: params.description.as_deref(),
+            add_labels: params.add_labels.as_deref(),
+            remove_labels: params.remove_labels.as_deref(),
+            reviewer_ids: params.reviewer_ids.as_deref(),
+            assignee_ids: params.assignee_ids.as_deref(),
+            state_event: params.state_event,
+        };
+
+        self.put(&endpoint, &body).await
+    }
+
+    /// Lists diff changes for a merge request (`GET /projects/:id/merge_requests/:mr_iid/diffs`).
+    pub async fn list_mr_diffs(
+        &self,
+        project_path: &str,
+        iid: u64,
+        max_items: Option<usize>,
+    ) -> Result<Vec<MergeRequestDiff>, ApiError> {
+        let encoded = Self::encode_path(project_path);
+        let endpoint = format!("projects/{encoded}/merge_requests/{iid}/diffs");
+        self.get_paged(&endpoint, &[], max_items).await
+    }
+
+    /// Lists discussion threads for a merge request (`GET /projects/:id/merge_requests/:mr_iid/discussions`).
+    pub async fn list_mr_discussions(
+        &self,
+        project_path: &str,
+        iid: u64,
+        max_items: Option<usize>,
+    ) -> Result<Vec<Discussion>, ApiError> {
+        let encoded = Self::encode_path(project_path);
+        let endpoint = format!("projects/{encoded}/merge_requests/{iid}/discussions");
+        self.get_paged(&endpoint, &[], max_items).await
+    }
+
+    /// Creates a new discussion thread on a merge request (`POST /projects/:id/merge_requests/:mr_iid/discussions`).
+    pub async fn create_mr_discussion(
+        &self,
+        project_path: &str,
+        iid: u64,
+        body: &str,
+        position: Option<&DiscussionPosition>,
+    ) -> Result<Discussion, ApiError> {
+        let encoded = Self::encode_path(project_path);
+        let endpoint = format!("projects/{encoded}/merge_requests/{iid}/discussions");
+
+        #[derive(Serialize)]
+        struct CreateDiscussionBody<'a> {
+            body: &'a str,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            position: Option<&'a DiscussionPosition>,
+        }
+
+        let payload = CreateDiscussionBody { body, position };
+        self.post(&endpoint, &payload).await
+    }
+
+    /// Adds a reply note to an existing discussion thread (`POST /projects/:id/merge_requests/:mr_iid/discussions/:discussion_id/notes`).
+    pub async fn create_discussion_note(
+        &self,
+        project_path: &str,
+        iid: u64,
+        discussion_id: &str,
+        body: &str,
+    ) -> Result<Note, ApiError> {
+        let encoded = Self::encode_path(project_path);
+        let endpoint =
+            format!("projects/{encoded}/merge_requests/{iid}/discussions/{discussion_id}/notes");
+
+        #[derive(Serialize)]
+        struct NoteReplyBody<'a> {
+            body: &'a str,
+        }
+
+        self.post(&endpoint, &NoteReplyBody { body }).await
+    }
+
+    /// Resolves or unresolves a discussion thread (`PUT /projects/:id/merge_requests/:mr_iid/discussions/:discussion_id`).
+    pub async fn resolve_mr_discussion(
+        &self,
+        project_path: &str,
+        iid: u64,
+        discussion_id: &str,
+        resolved: bool,
+    ) -> Result<Discussion, ApiError> {
+        let encoded = Self::encode_path(project_path);
+        let endpoint =
+            format!("projects/{encoded}/merge_requests/{iid}/discussions/{discussion_id}");
+
+        #[derive(Serialize)]
+        struct ResolveBody {
+            resolved: bool,
+        }
+
+        self.put(&endpoint, &ResolveBody { resolved }).await
+    }
+
+    /// Gets a single note on a merge request (`GET /projects/:id/merge_requests/:mr_iid/notes/:note_id`).
+    pub async fn get_mr_note(
+        &self,
+        project_path: &str,
+        iid: u64,
+        note_id: u64,
+    ) -> Result<Note, ApiError> {
+        let encoded = Self::encode_path(project_path);
+        let endpoint = format!("projects/{encoded}/merge_requests/{iid}/notes/{note_id}");
+        self.get(&endpoint, &[]).await
+    }
+
+    /// Updates an existing note on a merge request in place (`PUT /projects/:id/merge_requests/:mr_iid/notes/:note_id`).
+    pub async fn update_mr_note(
+        &self,
+        project_path: &str,
+        iid: u64,
+        note_id: u64,
+        body: &str,
+    ) -> Result<Note, ApiError> {
+        let encoded = Self::encode_path(project_path);
+        let endpoint = format!("projects/{encoded}/merge_requests/{iid}/notes/{note_id}");
+
+        #[derive(Serialize)]
+        struct EditNoteBody<'a> {
+            body: &'a str,
+        }
+
+        self.put(&endpoint, &EditNoteBody { body }).await
+    }
+
+    /// Lists commits associated with a merge request (`GET /projects/:id/merge_requests/:mr_iid/commits`).
+    pub async fn list_mr_commits(
+        &self,
+        project_path: &str,
+        iid: u64,
+    ) -> Result<Vec<MrCommit>, ApiError> {
+        let encoded = Self::encode_path(project_path);
+        let endpoint = format!("projects/{encoded}/merge_requests/{iid}/commits");
+        self.get_paged(&endpoint, &[], None).await
+    }
+
+    /// Looks up a GitLab user by their username (`GET /users?username=:username`).
+    pub async fn get_user_by_username(&self, username: &str) -> Result<Option<User>, ApiError> {
+        let users: Vec<User> = self.get("users", &[("username", username)]).await?;
+        Ok(users.into_iter().next())
+    }
+
+    /// Renders GitLab Flavored Markdown (`POST /markdown`).
+    pub async fn render_markdown(
+        &self,
+        text: &str,
+        gfm: bool,
+        project: Option<&str>,
+    ) -> Result<MarkdownRenderResult, ApiError> {
+        #[derive(Serialize)]
+        struct MarkdownBody<'a> {
+            text: &'a str,
+            gfm: bool,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            project: Option<&'a str>,
+        }
+
+        let body = MarkdownBody { text, gfm, project };
+        self.post("markdown", &body).await
     }
 
     /// Merges an open Merge Request (`PUT /projects/:id/merge_requests/:mr_iid/merge`).
@@ -644,6 +902,7 @@ impl GitLabClient {
         &self,
         project_path: &str,
         ref_name: Option<&str>,
+        sha: Option<&str>,
         status: Option<&str>,
         max_items: Option<usize>,
     ) -> Result<Vec<Pipeline>, ApiError> {
@@ -653,8 +912,11 @@ impl GitLabClient {
         if let Some(r) = ref_name {
             query.push(("ref", r));
         }
-        if let Some(s) = status {
-            query.push(("status", s));
+        if let Some(s) = sha {
+            query.push(("sha", s));
+        }
+        if let Some(st) = status {
+            query.push(("status", st));
         }
 
         self.get_paged(&endpoint, &query, max_items).await
@@ -672,10 +934,39 @@ impl GitLabClient {
         &self,
         project_path: &str,
         pipeline_id: u64,
+        scope: Option<&str>,
     ) -> Result<Vec<Job>, ApiError> {
         let encoded = Self::encode_path(project_path);
         let endpoint = format!("projects/{encoded}/pipelines/{pipeline_id}/jobs");
-        self.get_paged(&endpoint, &[], None).await
+        let mut query: Vec<(&str, &str)> = Vec::new();
+        if let Some(sc) = scope {
+            query.push(("scope", sc));
+        }
+        self.get_paged(&endpoint, &query, None).await
+    }
+
+    /// Fetches the raw text execution log trace of a job (`GET /projects/:id/jobs/:job_id/trace`).
+    pub async fn get_job_trace_text(
+        &self,
+        project_path: &str,
+        job_id: u64,
+    ) -> Result<String, ApiError> {
+        let encoded = Self::encode_path(project_path);
+        let endpoint = format!("projects/{encoded}/jobs/{job_id}/trace");
+        self.get_text(&endpoint, &[]).await
+    }
+
+    /// Fetches the raw content of a repository file (`GET /projects/:id/repository/files/:file_path/raw?ref=:ref`).
+    pub async fn get_raw_file(
+        &self,
+        project_path: &str,
+        file_path: &str,
+        ref_name: &str,
+    ) -> Result<String, ApiError> {
+        let encoded_proj = Self::encode_path(project_path);
+        let encoded_file = Self::encode_path(file_path);
+        let endpoint = format!("projects/{encoded_proj}/repository/files/{encoded_file}/raw");
+        self.get_text(&endpoint, &[("ref", ref_name)]).await
     }
 
     /// Creates / triggers a new pipeline on a given branch (`POST /projects/:id/pipeline`).

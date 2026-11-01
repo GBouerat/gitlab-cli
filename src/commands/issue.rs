@@ -5,6 +5,7 @@ use crate::cli::issue::{
     IssueArgs, IssueCloseArgs, IssueCommands, IssueCreateArgs, IssueListArgs, IssueNoteArgs,
     IssueNotesArgs, IssueReopenArgs, IssueViewArgs,
 };
+use crate::commands::body::{read_body, read_required_body};
 use crate::ui::table::{colored_cell, create_table, print_json_or_table, status_cell};
 use colored::Colorize;
 use comfy_table::{Cell, Color};
@@ -152,11 +153,13 @@ async fn handle_create(
         None => Text::new("Issue Title:").prompt()?,
     };
 
+    let description = read_body(args.description.as_deref(), args.file.as_deref())?;
+
     let issue = client
         .create_issue(
             project,
             &title,
-            args.description.as_deref(),
+            description.as_deref(),
             args.labels.as_deref(),
         )
         .await?;
@@ -209,10 +212,7 @@ async fn handle_note(
     client: &GitLabClient,
     project: &str,
 ) -> anyhow::Result<()> {
-    let body = match args.body {
-        Some(b) => b,
-        None => Text::new("Comment body:").prompt()?,
-    };
+    let body = read_required_body(args.body.as_deref(), args.file.as_deref(), "Comment body:")?;
 
     let note = client.create_issue_note(project, args.iid, &body).await?;
     println!(

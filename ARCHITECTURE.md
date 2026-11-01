@@ -74,9 +74,24 @@ Declares the CLI commands, options, and flags using `clap` derive macros:
 * **Subcommands**:
   * `auth`: Login, status, and logout commands.
   * `project` (alias: `repo`): View project metadata, clone URLs, and list user projects.
-  * `mr` (alias: `merge-request`): List, view, create, checkout, merge, close, reopen, approve, unapprove, view approvals, and add/list comments/notes on merge requests.
+  * `mr` (alias: `merge-request`): Comprehensive merge request workflow:
+    * `list`: List merge requests with state, target branch, and source branch filtering.
+    * `view` / `find`: Inspect merge request details by IID, branch name, or default to current Git branch.
+    * `create`: Create merge requests with reviewers, assignees (`@me`), labels, `-f` body, and auto branch removal.
+    * `checkout`: Fetch and switch to the merge request source branch locally.
+    * `diff`: List changed files (flags: new, renamed, deleted) or output unified patches with `--patch`.
+    * `discussions`: Inspect review threads, filter `--unresolved`, or view full note histories (`--full`).
+    * `comment`: Start new discussion threads or inline diff comments with `--path`, `--line`, and `--prefix`.
+    * `reply`: Post replies into existing discussion threads.
+    * `resolve`: Resolve or unresolve (`--undo`) review threads.
+    * `note-edit`: Edit notes and comments in place.
+    * `update`: Update MR title, description, reviewers, assignees, labels, and draft/ready state.
+    * `relink`: Rewrite commit SHAs after a rebase in descriptions or notes based on local Git subject matching.
+    * `merge`, `close`, `reopen`, `approve`, `unapprove`, `approvals`: State, approval, and lifecycle actions.
+  * `markdown`: Render GitLab Flavored Markdown (`POST /markdown`) and report task-list checkbox counts.
+  * `file`: Print raw repository file contents directly from a GitLab web URL (`/-/blob/`).
+  * `ci` (alias: `pipeline`): List pipelines (defaulting to HEAD commit) with failed job breakdowns, stream real-time traces, or inspect finished job traces (`ci trace --tail --no-color`).
   * `issue`: List, view, create, close, reopen, and add/list comments/notes on issues.
-  * `ci` (alias: `pipeline`): List pipelines, inspect jobs, trigger pipelines, and stream live job trace logs.
   * `release`: List, view, create, and delete project releases.
   * `branch`: List, view, create, and delete repository branches.
   * `tag`: List, view, create, and delete Git tags.
@@ -121,10 +136,14 @@ Context discovery engine:
 Strongly-typed Rust structures for GitLab REST API v4 data:
 * `User`: Profiles and authors.
 * `Project`: Repositories, metadata, clone URLs, and statistics.
-* `MergeRequest`: Details, approval states, branches, draft flags, and conflict indicators.
-* `MrApprovals` & `Note`: Approval states, approvers list, discussion comments, and system notes.
+* `MergeRequest`: Details, approval states, branches, draft flags, conflict indicators, and `DiffRefs` (base, start, head SHAs).
+* `MergeRequestDiff`: Changed files with flags (new, renamed, deleted) and unified patch diffs.
+* `Discussion` & `DiscussionPosition`: Review discussion threads, resolution status, and inline file positions (path, lines, SHAs).
+* `MrCommit`: Commit records for merge requests used during SHA relinking.
+* `MarkdownRenderResult`: HTML output from GitLab Flavored Markdown rendering.
+* `MrApprovals` & `Note`: Approval states, approvers list, discussion comments, positions, and system notes.
 * `Issue`: Issue tracker items, state, authors, and labels.
-* `Pipeline` & `Job`: CI/CD pipelines, statuses, durations, and job stage breakdowns.
+* `Pipeline` & `Job`: CI/CD pipelines, statuses, durations, job stage breakdowns, and `PipelineWithFailedJobs`.
 * `Release`: Project releases, tag associations, release assets, and author information.
 * `Branch`: Git branches, protection status, default branch tags, and commit summaries.
 * `Tag`: Git tags, annotation messages, and commit associations.

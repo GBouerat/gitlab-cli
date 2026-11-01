@@ -150,6 +150,76 @@ pub fn get_current_branch(dir: &Path) -> anyhow::Result<String> {
     Ok(branch)
 }
 
+/// Retrieves the current HEAD commit SHA (40 hexadecimal characters) in the given directory.
+///
+/// Queries `git rev-parse HEAD`.
+///
+/// # Arguments
+///
+/// * `dir` - The directory containing the Git repository.
+///
+/// # Errors
+///
+/// Returns an error if the Git command fails or HEAD cannot be resolved.
+pub fn get_head_sha(dir: &Path) -> anyhow::Result<String> {
+    let output = Command::new("git")
+        .arg("rev-parse")
+        .arg("HEAD")
+        .current_dir(dir)
+        .output()?;
+
+    if !output.status.success() {
+        anyhow::bail!(
+            "Failed to get HEAD commit SHA: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        );
+    }
+
+    let sha = String::from_utf8(output.stdout)?.trim().to_string();
+    if sha.is_empty() {
+        anyhow::bail!("Empty HEAD SHA returned from git");
+    }
+
+    Ok(sha)
+}
+
+/// Retrieves the subject line of a commit from the local Git repository.
+///
+/// Queries `git log -1 --format=%s <sha>`.
+///
+/// # Arguments
+///
+/// * `dir` - The directory containing the Git repository.
+/// * `sha` - Full commit SHA or commit prefix.
+///
+/// # Errors
+///
+/// Returns an error if the commit does not exist locally or cannot be queried.
+pub fn get_commit_subject(dir: &Path, sha: &str) -> anyhow::Result<String> {
+    let output = Command::new("git")
+        .arg("log")
+        .arg("-1")
+        .arg("--format=%s")
+        .arg(sha)
+        .current_dir(dir)
+        .output()?;
+
+    if !output.status.success() {
+        anyhow::bail!(
+            "Commit '{}' not found in local git repository: {}",
+            sha,
+            String::from_utf8_lossy(&output.stderr).trim()
+        );
+    }
+
+    let subject = String::from_utf8(output.stdout)?.trim().to_string();
+    if subject.is_empty() {
+        anyhow::bail!("Commit '{}' has an empty subject line", sha);
+    }
+
+    Ok(subject)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

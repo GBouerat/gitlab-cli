@@ -58,6 +58,9 @@ pub struct IssueViewArgs {
 
 /// Arguments for `gitlab issue create`.
 #[derive(Args, Debug)]
+#[command(
+    after_help = "Examples:\n  gitlab issue create -t \"Bug title\" -d \"Details\"\n  gitlab issue create -t \"Bug title\" -f details.md\n  cat bug.md | gitlab issue create -t \"Bug\" -f -"
+)]
 pub struct IssueCreateArgs {
     /// Issue title.
     #[arg(short = 't', long)]
@@ -66,6 +69,10 @@ pub struct IssueCreateArgs {
     /// Issue description (Markdown).
     #[arg(short = 'd', long)]
     pub description: Option<String>,
+
+    /// Path to file containing description (or `-` for stdin).
+    #[arg(short = 'f', long, conflicts_with = "description")]
+    pub file: Option<String>,
 
     /// Comma-separated labels to attach.
     #[arg(short = 'l', long)]
@@ -88,6 +95,9 @@ pub struct IssueReopenArgs {
 
 /// Arguments for `gitlab issue note`.
 #[derive(Args, Debug)]
+#[command(
+    after_help = "Examples:\n  gitlab issue note 42 -b \"Reproduced on macOS\"\n  gitlab issue note 42 -f comment.md\n  cat comment.md | gitlab issue note 42 -f -"
+)]
 pub struct IssueNoteArgs {
     /// Internal project-scoped issue IID.
     pub iid: u64,
@@ -95,6 +105,10 @@ pub struct IssueNoteArgs {
     /// Comment text body (Markdown). If omitted, an interactive editor/prompt will open.
     #[arg(short = 'b', long)]
     pub body: Option<String>,
+
+    /// Path to file containing note body (or `-` for stdin).
+    #[arg(short = 'f', long, conflicts_with = "body")]
+    pub file: Option<String>,
 }
 
 /// Arguments for `gitlab issue notes`.

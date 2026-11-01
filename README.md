@@ -84,20 +84,53 @@ gitlab project view --web
 gitlab project list
 ```
 
-### 3. Merge Requests
+### 3. Merge Requests & Review Workflow
 
 ```bash
 # List open merge requests
 gitlab mr list
 
-# List merged merge requests
-gitlab mr list --state merged
+# List merge requests for a specific source branch
+gitlab mr list --source-branch feature-branch
 
-# View details of a merge request
+# View open merge request of current branch (or find by branch name/IID)
+gitlab mr view
+gitlab mr find feature-branch
 gitlab mr view 42
 
-# Create a merge request interactively (or from current branch)
-gitlab mr create --title "Add new feature" --draft
+# Create a merge request with reviewers, assignees, and labels
+gitlab mr create --title "Add new feature" -f description.md --reviewer alice --assignee @me --label feature --remove-source-branch
+
+# View changed files or unified diff
+gitlab mr diff 42
+gitlab mr diff 42 --patch
+
+# Inspect review discussions and threads
+gitlab mr discussions 42
+gitlab mr discussions 42 --unresolved
+gitlab mr discussions 42 --full
+
+# Start a new discussion thread or inline diff review comment
+gitlab mr comment 42 -f review.md
+gitlab mr comment 42 -f review.md --path src/main.rs --line 42 --prefix "Suggestion:"
+cat review.md | gitlab mr comment 42 -f -
+
+# Reply to or resolve a discussion thread
+gitlab mr reply 42 thread-abc-123 -b "Addressed in latest commit"
+gitlab mr resolve 42 thread-abc-123
+gitlab mr resolve 42 thread-abc-123 --undo
+
+# Edit an existing note in place
+gitlab mr note-edit 42 12345 -f updated-note.md --prefix "[EDIT]"
+
+# Update merge request metadata, labels, reviewers, or draft status
+gitlab mr update 42 --ready --add-label approved --reviewer bob
+gitlab mr update 42 --draft --remove-label approved
+
+# Relink rebased commit SHAs in note or description to current commits
+gitlab mr relink 42 --dry-run
+gitlab mr relink 42
+gitlab mr relink 42 12345
 
 # Check out a merge request branch locally
 gitlab mr checkout 42
@@ -108,27 +141,26 @@ gitlab mr approve 42
 # View approval status and reviewers
 gitlab mr approvals 42
 
-# Add a comment to a merge request
-gitlab mr note 42 --body "LGTM!"
-
-# List comments on a merge request
-gitlab mr notes 42
-
 # Merge an open merge request
 gitlab mr merge 42 --squash --remove-source-branch
 ```
 
-### 4. CI/CD Pipelines & Job Logs
+### 4. CI/CD Pipelines & Job Traces
 
 ```bash
-# List recent pipelines
+# List pipelines for HEAD commit of current repo (includes failed jobs breakdown)
 gitlab ci list
+
+# List pipelines for a specific ref or commit SHA
+gitlab ci list --ref main
+gitlab ci list --sha 11223344
 
 # View jobs and status in a pipeline
 gitlab ci view 123456
 
-# Stream real-time logs from a CI job
+# Print job trace log with optional tailing and ANSI/section stripping
 gitlab ci trace 987654
+gitlab ci trace 987654 --tail 50 --no-color
 
 # Trigger a pipeline on current branch
 gitlab ci run
@@ -146,11 +178,13 @@ gitlab issue list
 # Filter issues by label
 gitlab issue list --labels "bug,critical"
 
-# Create a new issue
-gitlab issue create --title "Parser panic on invalid token"
+# Create a new issue (inline description or from file/stdin)
+gitlab issue create --title "Parser panic on invalid token" -f bug-report.md
+cat report.md | gitlab issue create --title "Regression" -f -
 
-# Add a comment to an issue
+# Add a comment to an issue (inline body or from file/stdin)
 gitlab issue note 15 --body "Looking into this."
+gitlab issue note 15 -f investigation.md
 
 # List comments on an issue
 gitlab issue notes 15
@@ -333,7 +367,31 @@ gitlab api user
 gitlab api projects/:id/pipelines
 ```
 
-### 15. Shell Completions
+### 15. Markdown Rendering (`gitlab markdown`)
+
+Render GitLab Flavored Markdown (GFM) using GitLab's backend rendering engine and inspect task-list checkbox completion:
+
+```bash
+# Render inline markdown
+gitlab markdown render -b "# Title with task\n- [x] Done\n- [ ] Pending"
+
+# Render from a file with project context
+gitlab markdown render -f README.md --project
+
+# Render from stdin
+cat notes.md | gitlab markdown render -f -
+```
+
+### 16. Repository File Web URL (`gitlab file`)
+
+Fetch and print the raw content of any file directly using its web URL:
+
+```bash
+# Print a repository file from its GitLab web URL
+gitlab file https://gitlab.example.com/group/subgroup/project/-/blob/main/src/main.rs
+```
+
+### 17. Shell Completions
 
 Generate completions for your shell:
 

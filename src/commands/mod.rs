@@ -2,14 +2,17 @@
 
 pub mod api;
 pub mod auth;
+pub mod body;
 pub mod branch;
 pub mod ci;
 pub mod completion;
 pub mod deployment;
 pub mod environment;
 pub mod epic;
+pub mod file;
 pub mod group;
 pub mod issue;
+pub mod markdown;
 pub mod milestone;
 pub mod mr;
 pub mod package;
@@ -37,20 +40,21 @@ use std::env;
 ///
 /// Returns an error if context resolution, authentication, or command execution fails.
 pub async fn run_command(cli: Cli, mut config: Config) -> anyhow::Result<()> {
+    let current_dir = env::current_dir().unwrap_or_default();
+    let git_ctx = resolve_git_context(&current_dir).ok();
+    let git_host = git_ctx.as_ref().map(|g| g.host.as_str());
+
     match cli.command {
-        Commands::Auth(args) => auth::execute_auth(args, &mut config).await,
+        Commands::Auth(args) => {
+            auth::execute_auth(args, &mut config, cli.host.as_deref(), git_host).await
+        }
         Commands::Completion(args) => {
             completion::execute_completion(args);
             Ok(())
         }
+        Commands::File(args) => file::execute_file(args, &config, cli.json).await,
         other => {
-            let current_dir = env::current_dir().unwrap_or_default();
-            let git_ctx = resolve_git_context(&current_dir).ok();
-
-            let auth = config.resolve_auth(
-                cli.host.as_deref(),
-                git_ctx.as_ref().map(|g| g.host.as_str()),
-            )?;
+            let auth = config.resolve_auth(cli.host.as_deref(), git_host)?;
 
             let client = GitLabClient::with_job_token(&auth.host, &auth.token, auth.is_job_token)?;
 
@@ -157,8 +161,11 @@ pub async fn run_command(cli: Cli, mut config: Config) -> anyhow::Result<()> {
                 }
                 Commands::Group(args) => group::execute_group(args, &client, cli.json).await,
                 Commands::Snippet(args) => snippet::execute_snippet(args, &client, cli.json).await,
+                Commands::Markdown(args) => {
+                    markdown::execute_markdown(args, &client, default_project, cli.json).await
+                }
                 Commands::Api(args) => api::execute_api(args, &client, default_project).await,
-                Commands::Auth(_) | Commands::Completion(_) => unreachable!(),
+                Commands::Auth(_) | Commands::Completion(_) | Commands::File(_) => unreachable!(),
             }
         }
     }

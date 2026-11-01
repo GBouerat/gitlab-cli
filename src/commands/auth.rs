@@ -2,7 +2,7 @@
 
 use crate::api::GitLabClient;
 use crate::cli::auth::{AuthArgs, AuthCommands, LoginArgs, LogoutArgs, StatusArgs};
-use crate::config::{Config, DEFAULT_GITLAB_HOST};
+use crate::config::Config;
 use colored::Colorize;
 use inquire::Password;
 
@@ -12,26 +12,38 @@ use inquire::Password;
 ///
 /// * `args` - Authentication command arguments.
 /// * `config` - Stored configuration reference.
+/// * `cli_host` - Optional host specified via `--host` global flag.
+/// * `git_host` - Optional host detected from Git remote.
 ///
 /// # Errors
 ///
 /// Returns an error if login, status check, or logout operations fail.
-pub async fn execute_auth(args: AuthArgs, config: &mut Config) -> anyhow::Result<()> {
+pub async fn execute_auth(
+    args: AuthArgs,
+    config: &mut Config,
+    cli_host: Option<&str>,
+    git_host: Option<&str>,
+) -> anyhow::Result<()> {
     match args.command {
-        AuthCommands::Login(login_args) => handle_login(login_args, config).await,
-        AuthCommands::Status(status_args) => handle_status(status_args, config).await,
-        AuthCommands::Logout(logout_args) => handle_logout(logout_args, config).await,
+        AuthCommands::Login(login_args) => {
+            handle_login(login_args, config, cli_host, git_host).await
+        }
+        AuthCommands::Status(status_args) => {
+            handle_status(status_args, config, cli_host, git_host).await
+        }
+        AuthCommands::Logout(logout_args) => {
+            handle_logout(logout_args, config, cli_host, git_host).await
+        }
     }
 }
 
-async fn handle_login(args: LoginArgs, config: &mut Config) -> anyhow::Result<()> {
-    let host = args.host.unwrap_or_else(|| {
-        if config.default_host.is_empty() {
-            DEFAULT_GITLAB_HOST.to_string()
-        } else {
-            config.default_host.clone()
-        }
-    });
+async fn handle_login(
+    args: LoginArgs,
+    config: &mut Config,
+    cli_host: Option<&str>,
+    git_host: Option<&str>,
+) -> anyhow::Result<()> {
+    let host = config.resolve_host(args.host.as_deref().or(cli_host), git_host);
 
     let token = match args.token {
         Some(t) => t,
@@ -69,14 +81,13 @@ async fn handle_login(args: LoginArgs, config: &mut Config) -> anyhow::Result<()
     Ok(())
 }
 
-async fn handle_status(args: StatusArgs, config: &Config) -> anyhow::Result<()> {
-    let host = args.host.unwrap_or_else(|| {
-        if config.default_host.is_empty() {
-            DEFAULT_GITLAB_HOST.to_string()
-        } else {
-            config.default_host.clone()
-        }
-    });
+async fn handle_status(
+    args: StatusArgs,
+    config: &Config,
+    cli_host: Option<&str>,
+    git_host: Option<&str>,
+) -> anyhow::Result<()> {
+    let host = config.resolve_host(args.host.as_deref().or(cli_host), git_host);
 
     match config.resolve_auth(Some(&host), None) {
         Ok(auth) => {
@@ -127,14 +138,13 @@ async fn handle_status(args: StatusArgs, config: &Config) -> anyhow::Result<()> 
     Ok(())
 }
 
-async fn handle_logout(args: LogoutArgs, config: &mut Config) -> anyhow::Result<()> {
-    let host = args.host.unwrap_or_else(|| {
-        if config.default_host.is_empty() {
-            DEFAULT_GITLAB_HOST.to_string()
-        } else {
-            config.default_host.clone()
-        }
-    });
+async fn handle_logout(
+    args: LogoutArgs,
+    config: &mut Config,
+    cli_host: Option<&str>,
+    git_host: Option<&str>,
+) -> anyhow::Result<()> {
+    let host = config.resolve_host(args.host.as_deref().or(cli_host), git_host);
 
     if config.remove_host(&host) {
         config.save()?;

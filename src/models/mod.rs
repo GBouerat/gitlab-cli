@@ -20,15 +20,17 @@ pub mod user;
 pub mod variable;
 
 pub use branch::Branch;
-pub use ci::{Job, Pipeline};
+pub use ci::{Job, Pipeline, PipelineWithFailedJobs};
 pub use deployment::Deployment;
 pub use environment::Environment;
 pub use epic::Epic;
 pub use group::{Group, GroupMember};
 pub use issue::Issue;
 pub use milestone::Milestone;
-pub use mr::MergeRequest;
-pub use note::{MrApprovals, Note};
+pub use mr::{
+    DiffRefs, Discussion, MarkdownRenderResult, MergeRequest, MergeRequestDiff, MrCommit,
+};
+pub use note::{DiscussionPosition, MrApprovals, Note};
 pub use package::{Package, PackageFile};
 pub use project::Project;
 pub use registry::{RegistryRepository, RegistryTag};

@@ -186,6 +186,37 @@ impl Config {
         self.hosts.get(target_host).map(|h| h.token.clone())
     }
 
+    /// Resolves the effective GitLab instance hostname following the precedence order:
+    /// 1. CLI `--host` flag
+    /// 2. Git remote host
+    /// 3. `GITLAB_HOST` environment variable
+    /// 4. Configured default host (`config.default_host`)
+    /// 5. Fallback host (`gitlab.com`)
+    ///
+    /// # Arguments
+    ///
+    /// * `cli_host` - Optional host passed via CLI argument.
+    /// * `git_host` - Optional host detected from Git remote.
+    pub fn resolve_host(&self, cli_host: Option<&str>, git_host: Option<&str>) -> String {
+        if let Some(h) = cli_host {
+            h.to_string()
+        } else if let Some(h) = git_host {
+            h.to_string()
+        } else if let Ok(h) = std::env::var("GITLAB_HOST") {
+            if !h.trim().is_empty() {
+                h.trim().to_string()
+            } else if !self.default_host.is_empty() {
+                self.default_host.clone()
+            } else {
+                DEFAULT_GITLAB_HOST.to_string()
+            }
+        } else if !self.default_host.is_empty() {
+            self.default_host.clone()
+        } else {
+            DEFAULT_GITLAB_HOST.to_string()
+        }
+    }
+
     /// Resolves the effective host and authentication token.
     ///
     /// Resolution order:
@@ -206,21 +237,7 @@ impl Config {
         git_host: Option<&str>,
     ) -> anyhow::Result<ResolvedAuth> {
         // Resolve host
-        let host = if let Some(h) = cli_host {
-            h.to_string()
-        } else if let Some(h) = git_host {
-            h.to_string()
-        } else if let Ok(h) = std::env::var("GITLAB_HOST") {
-            if !h.trim().is_empty() {
-                h.trim().to_string()
-            } else {
-                self.default_host.clone()
-            }
-        } else if !self.default_host.is_empty() {
-            self.default_host.clone()
-        } else {
-            DEFAULT_GITLAB_HOST.to_string()
-        };
+        let host = self.resolve_host(cli_host, git_host);
 
         // Resolve token: check GITLAB_TOKEN or CI_JOB_TOKEN environment variable first
         if let Ok(env_token) = std::env::var("GITLAB_TOKEN") {

@@ -72,3 +72,14 @@ pub struct Job {
     #[serde(default)]
     pub allow_failure: Option<bool>,
 }
+
+/// Representation of a pipeline bundled with its failed jobs.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct PipelineWithFailedJobs {
+    /// Pipeline details.
+    #[serde(flatten)]
+    pub pipeline: Pipeline,
+    /// Failed jobs within this pipeline.
+    #[serde(default)]
+    pub failed_jobs: Vec<Job>,
+}

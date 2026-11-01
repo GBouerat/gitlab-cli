@@ -3,7 +3,7 @@
 use gitlab_cli::api::GitLabClient;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
-use wiremock::matchers::{header, method, path, query_param};
+use wiremock::matchers::{body_json, header, method, path, query_param};
 use wiremock::{Mock, MockServer, Request, ResponseTemplate};
 
 #[tokio::test]
@@ -114,7 +114,7 @@ async fn test_list_mrs_with_query_params() {
 
     let client = GitLabClient::new(mock_server.uri(), "token").unwrap();
     let mrs = client
-        .list_mrs("owner/repo", Some("opened"), None, Some(10))
+        .list_mrs("owner/repo", Some("opened"), None, None, Some(10))
         .await
         .unwrap();
 
@@ -171,6 +171,7 @@ async fn test_create_and_merge_mr() {
             description: Some("Description"),
             draft: true,
             squash: true,
+            ..Default::default()
         })
         .await
         .unwrap();
@@ -1255,4 +1256,470 @@ async fn test_set_variable_validation_error_does_not_put() {
         }
         other => panic!("Expected GitLab ApiError, got {:?}", other),
     }
+}
+
+#[tokio::test]
+async fn test_mr_body_file_byte_for_byte() {
+    use std::io::Write;
+    use tempfile::NamedTempFile;
+
+    let mock_server = MockServer::start().await;
+
+    // Body with backticks, $, quotes, and pipes
+    let raw_content =
+        "Here is `echo $FOO`, \"double quotes\", 'single quotes', and | pipes |.\nPreserved 100%.";
+
+    let mut tmp = NamedTempFile::new().unwrap();
+    tmp.write_all(raw_content.as_bytes()).unwrap();
+
+    let note_json = serde_json::json!({
+        "id": 888,
+        "body": raw_content,
+        "system": false,
+        "resolvable": false,
+        "resolved": false
+    });
+
+    Mock::given(method("POST"))
+        .and(path("/api/v4/projects/team%2Frepo/merge_requests/42/notes"))
+        .and(body_json(serde_json::json!({
+            "body": raw_content
+        })))
+        .respond_with(ResponseTemplate::new(201).set_body_json(&note_json))
+        .mount(&mock_server)
+        .await;
+
+    let client = GitLabClient::new(mock_server.uri(), "token").unwrap();
+
+    // Read from file
+    let body = gitlab_cli::commands::body::read_body(None, Some(tmp.path().to_str().unwrap()))
+        .unwrap()
+        .unwrap();
+
+    assert_eq!(body, raw_content);
+
+    let note = client.create_mr_note("team/repo", 42, &body).await.unwrap();
+    assert_eq!(note.body, raw_content);
+}
+
+#[tokio::test]
+async fn test_mr_diffs_and_patch() {
+    let mock_server = MockServer::start().await;
+
+    let diff_response = serde_json::json!([
+        {
+            "old_path": "src/main.rs",
+            "new_path": "src/main.rs",
+            "a_mode": "100644",
+            "b_mode": "100644",
+            "new_file": false,
+            "renamed_file": false,
+            "deleted_file": false,
+            "diff": "@@ -1,3 +1,4 @@\n+use std::path::Path;\n fn main() {}"
+        },
+        {
+            "old_path": "old.txt",
+            "new_path": "new.txt",
+            "a_mode": "100644",
+            "b_mode": "100644",
+            "new_file": false,
+            "renamed_file": true,
+            "deleted_file": false,
+            "diff": ""
+        }
+    ]);
+
+    Mock::given(method("GET"))
+        .and(path("/api/v4/projects/team%2Frepo/merge_requests/12/diffs"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(&diff_response))
+        .mount(&mock_server)
+        .await;
+
+    let client = GitLabClient::new(mock_server.uri(), "token").unwrap();
+    let diffs = client.list_mr_diffs("team/repo", 12, None).await.unwrap();
+
+    assert_eq!(diffs.len(), 2);
+    assert_eq!(diffs[0].new_path, "src/main.rs");
+    assert!(diffs[0].diff.contains("+use std::path::Path;"));
+    assert!(diffs[1].renamed_file);
+}
+
+#[tokio::test]
+async fn test_mr_discussions_and_inline_comment() {
+    let mock_server = MockServer::start().await;
+
+    let mr_json = serde_json::json!({
+        "id": 100,
+        "iid": 12,
+        "project_id": 1,
+        "title": "MR 12",
+        "state": "opened",
+        "source_branch": "feat",
+        "target_branch": "main",
+        "diff_refs": {
+            "base_sha": "base123",
+            "start_sha": "start456",
+            "head_sha": "head789"
+        }
+    });
+
+    Mock::given(method("GET"))
+        .and(path("/api/v4/projects/team%2Frepo/merge_requests/12"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(&mr_json))
+        .mount(&mock_server)
+        .await;
+
+    let disc_json = serde_json::json!({
+        "id": "thread-abc-123",
+        "individual_note": false,
+        "notes": [
+            {
+                "id": 501,
+                "body": "Inline review comment",
+                "system": false,
+                "resolvable": true,
+                "resolved": false,
+                "position": {
+                    "base_sha": "base123",
+                    "start_sha": "start456",
+                    "head_sha": "head789",
+                    "old_path": "src/lib.rs",
+                    "new_path": "src/lib.rs",
+                    "position_type": "text",
+                    "new_line": 42
+                }
+            }
+        ]
+    });
+
+    Mock::given(method("POST"))
+        .and(path(
+            "/api/v4/projects/team%2Frepo/merge_requests/12/discussions",
+        ))
+        .respond_with(ResponseTemplate::new(201).set_body_json(&disc_json))
+        .mount(&mock_server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path(
+            "/api/v4/projects/team%2Frepo/merge_requests/12/discussions",
+        ))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([disc_json])))
+        .mount(&mock_server)
+        .await;
+
+    let reply_json = serde_json::json!({
+        "id": 502,
+        "body": "Looks good!",
+        "system": false,
+        "resolvable": true,
+        "resolved": false
+    });
+
+    Mock::given(method("POST"))
+        .and(path(
+            "/api/v4/projects/team%2Frepo/merge_requests/12/discussions/thread-abc-123/notes",
+        ))
+        .respond_with(ResponseTemplate::new(201).set_body_json(&reply_json))
+        .mount(&mock_server)
+        .await;
+
+    let resolved_disc = serde_json::json!({
+        "id": "thread-abc-123",
+        "individual_note": false,
+        "notes": [
+            {
+                "id": 501,
+                "body": "Inline review comment",
+                "system": false,
+                "resolvable": true,
+                "resolved": true
+            }
+        ]
+    });
+
+    Mock::given(method("PUT"))
+        .and(path(
+            "/api/v4/projects/team%2Frepo/merge_requests/12/discussions/thread-abc-123",
+        ))
+        .respond_with(ResponseTemplate::new(200).set_body_json(&resolved_disc))
+        .mount(&mock_server)
+        .await;
+
+    let client = GitLabClient::new(mock_server.uri(), "token").unwrap();
+
+    let mr = client.get_mr("team/repo", 12).await.unwrap();
+    let diff_refs = mr.diff_refs.unwrap();
+    assert_eq!(diff_refs.base_sha.as_deref(), Some("base123"));
+
+    let pos = gitlab_cli::models::DiscussionPosition {
+        base_sha: diff_refs.base_sha,
+        start_sha: diff_refs.start_sha,
+        head_sha: diff_refs.head_sha,
+        old_path: Some("src/lib.rs".to_string()),
+        new_path: Some("src/lib.rs".to_string()),
+        position_type: Some("text".to_string()),
+        new_line: Some(42),
+        old_line: None,
+    };
+
+    let created_disc = client
+        .create_mr_discussion("team/repo", 12, "Inline review comment", Some(&pos))
+        .await
+        .unwrap();
+    assert_eq!(created_disc.id, "thread-abc-123");
+    assert!(created_disc.is_resolvable());
+    assert!(!created_disc.is_resolved());
+
+    let discussions = client
+        .list_mr_discussions("team/repo", 12, None)
+        .await
+        .unwrap();
+    assert_eq!(discussions.len(), 1);
+
+    let reply = client
+        .create_discussion_note("team/repo", 12, "thread-abc-123", "Looks good!")
+        .await
+        .unwrap();
+    assert_eq!(reply.id, 502);
+
+    let resolved = client
+        .resolve_mr_discussion("team/repo", 12, "thread-abc-123", true)
+        .await
+        .unwrap();
+    assert!(resolved.is_resolved());
+}
+
+#[tokio::test]
+async fn test_mr_note_edit_and_update() {
+    let mock_server = MockServer::start().await;
+
+    let updated_note = serde_json::json!({
+        "id": 777,
+        "body": "Edited body content",
+        "system": false,
+        "resolvable": false,
+        "resolved": false
+    });
+
+    Mock::given(method("PUT"))
+        .and(path(
+            "/api/v4/projects/team%2Frepo/merge_requests/12/notes/777",
+        ))
+        .respond_with(ResponseTemplate::new(200).set_body_json(&updated_note))
+        .mount(&mock_server)
+        .await;
+
+    let user_alice = serde_json::json!([
+        {
+            "id": 333,
+            "username": "alice",
+            "name": "Alice Developer",
+            "state": "active"
+        }
+    ]);
+
+    Mock::given(method("GET"))
+        .and(path("/api/v4/users"))
+        .and(query_param("username", "alice"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(&user_alice))
+        .mount(&mock_server)
+        .await;
+
+    let updated_mr = serde_json::json!({
+        "id": 100,
+        "iid": 12,
+        "project_id": 1,
+        "title": "Ready: New Title",
+        "state": "opened",
+        "source_branch": "feat",
+        "target_branch": "main"
+    });
+
+    Mock::given(method("PUT"))
+        .and(path("/api/v4/projects/team%2Frepo/merge_requests/12"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(&updated_mr))
+        .mount(&mock_server)
+        .await;
+
+    let client = GitLabClient::new(mock_server.uri(), "token").unwrap();
+
+    let note = client
+        .update_mr_note("team/repo", 12, 777, "Edited body content")
+        .await
+        .unwrap();
+    assert_eq!(note.body, "Edited body content");
+
+    let user = client.get_user_by_username("alice").await.unwrap().unwrap();
+    assert_eq!(user.id, 333);
+
+    let mr = client
+        .update_mr(&gitlab_cli::api::UpdateMrParams {
+            project_path: "team/repo",
+            iid: 12,
+            title: Some("Ready: New Title".to_string()),
+            reviewer_ids: Some(vec![user.id]),
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+    assert_eq!(mr.title, "Ready: New Title");
+}
+
+#[tokio::test]
+async fn test_markdown_render_and_checkboxes() {
+    let mock_server = MockServer::start().await;
+
+    let render_response = serde_json::json!({
+        "html": "<p>Rendered GFM with checkboxes</p>"
+    });
+
+    Mock::given(method("POST"))
+        .and(path("/api/v4/markdown"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(&render_response))
+        .mount(&mock_server)
+        .await;
+
+    let client = GitLabClient::new(mock_server.uri(), "token").unwrap();
+    let text = "- [x] Done\n- [ ] Todo\n| [x] Table item |";
+    let res = client
+        .render_markdown(text, true, Some("team/repo"))
+        .await
+        .unwrap();
+    assert_eq!(res.html, "<p>Rendered GFM with checkboxes</p>");
+
+    let count = gitlab_cli::commands::markdown::count_checkboxes(text);
+    assert_eq!(count.checked, 2);
+    assert_eq!(count.unchecked, 1);
+    assert_eq!(count.total, 3);
+}
+
+#[tokio::test]
+async fn test_ci_list_with_failed_jobs_and_trace_tail() {
+    let mock_server = MockServer::start().await;
+
+    let pipelines_response = serde_json::json!([
+        {
+            "id": 999,
+            "project_id": 1,
+            "sha": "abcdef0123456789",
+            "ref": "main",
+            "status": "failed"
+        }
+    ]);
+
+    Mock::given(method("GET"))
+        .and(path("/api/v4/projects/team%2Frepo/pipelines"))
+        .and(query_param("sha", "abcdef0123456789"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(&pipelines_response))
+        .mount(&mock_server)
+        .await;
+
+    let jobs_response = serde_json::json!([
+        {
+            "id": 555,
+            "name": "cargo test",
+            "stage": "test",
+            "status": "failed",
+            "web_url": "https://gitlab.com/team/repo/-/jobs/555"
+        },
+        {
+            "id": 556,
+            "name": "build",
+            "stage": "build",
+            "status": "success",
+            "web_url": "https://gitlab.com/team/repo/-/jobs/556"
+        }
+    ]);
+
+    Mock::given(method("GET"))
+        .and(path("/api/v4/projects/team%2Frepo/pipelines/999/jobs"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(&jobs_response))
+        .mount(&mock_server)
+        .await;
+
+    let raw_trace = "section_start:1680000000:step\r\x1b[0KStarting step\n\x1b[32mSuccess line\x1b[0m\nsection_end:1680000000:step\r\x1b[0KFinal line";
+
+    Mock::given(method("GET"))
+        .and(path("/api/v4/projects/team%2Frepo/jobs/555/trace"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(raw_trace))
+        .mount(&mock_server)
+        .await;
+
+    let client = GitLabClient::new(mock_server.uri(), "token").unwrap();
+
+    let pipelines = client
+        .list_pipelines("team/repo", None, Some("abcdef0123456789"), None, Some(10))
+        .await
+        .unwrap();
+    assert_eq!(pipelines.len(), 1);
+
+    let jobs = client
+        .list_pipeline_jobs("team/repo", 999, None)
+        .await
+        .unwrap();
+    let failed: Vec<_> = jobs.into_iter().filter(|j| j.status == "failed").collect();
+    assert_eq!(failed.len(), 1);
+    assert_eq!(failed[0].name, "cargo test");
+
+    let trace = client.get_job_trace_text("team/repo", 555).await.unwrap();
+    let stripped = gitlab_cli::commands::ci::strip_ansi_and_sections(&trace);
+    assert!(!stripped.contains("section_start"));
+    assert!(!stripped.contains("\x1b[32m"));
+    assert!(stripped.contains("Starting step"));
+    assert!(stripped.contains("Final line"));
+}
+
+#[tokio::test]
+async fn test_raw_file_from_blob_url() {
+    let mock_server = MockServer::start().await;
+
+    let file_content = "# Welcome to GitLab CLI\nfn main() {}";
+
+    Mock::given(method("GET"))
+        .and(path(
+            "/api/v4/projects/org%2Fproj/repository/files/src%2Fmain.rs/raw",
+        ))
+        .and(query_param("ref", "main"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(file_content))
+        .mount(&mock_server)
+        .await;
+
+    let client = GitLabClient::new(mock_server.uri(), "token").unwrap();
+
+    let content = client
+        .get_raw_file("org/proj", "src/main.rs", "main")
+        .await
+        .unwrap();
+    assert_eq!(content, file_content);
+}
+
+#[tokio::test]
+async fn test_mr_commits_for_relink() {
+    let mock_server = MockServer::start().await;
+
+    let commits_response = serde_json::json!([
+        {
+            "id": "1111222233334444555566667777888899990000",
+            "short_id": "11112222",
+            "title": "Fix memory leak in parser",
+            "author_name": "Bob",
+            "created_at": "2026-10-30T12:00:00Z"
+        }
+    ]);
+
+    Mock::given(method("GET"))
+        .and(path(
+            "/api/v4/projects/team%2Frepo/merge_requests/12/commits",
+        ))
+        .respond_with(ResponseTemplate::new(200).set_body_json(&commits_response))
+        .mount(&mock_server)
+        .await;
+
+    let client = GitLabClient::new(mock_server.uri(), "token").unwrap();
+    let commits = client.list_mr_commits("team/repo", 12).await.unwrap();
+
+    assert_eq!(commits.len(), 1);
+    assert_eq!(commits[0].id, "1111222233334444555566667777888899990000");
+    assert_eq!(commits[0].title, "Fix memory leak in parser");
 }
